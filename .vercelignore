@@ -1,0 +1,8 @@
+.git
+.data
+.impeccable
+node_modules
+.next
+test-results
+playwright-report
+.env*
