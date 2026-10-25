@@ -1,0 +1,277 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-24T19:17:31.448577Z",
+  "title": "Design System: Word Rally",
+  "extensions": {
+    "colorMeta": {
+      "canvas": {
+        "role": "neutral",
+        "displayName": "Chalk Canvas"
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "White Paper"
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Deep Ink"
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Quiet Green Ink"
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Paper Line"
+      },
+      "green": {
+        "role": "primary",
+        "displayName": "Forest Green"
+      },
+      "green-dark": {
+        "role": "primary",
+        "displayName": "Deep Forest"
+      },
+      "mint": {
+        "role": "primary",
+        "displayName": "Pale Mint"
+      },
+      "gold": {
+        "role": "secondary",
+        "displayName": "Mustard Gold"
+      },
+      "yellow": {
+        "role": "secondary",
+        "displayName": "Pale Yellow"
+      },
+      "stone": {
+        "role": "neutral",
+        "displayName": "Stone"
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Rounded invitation lettering with responsive tablet and phone variants."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Room and result headings."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Compact panel headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "General reading and supporting operational text."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Persistent form labels and compact control text."
+      },
+      "action": {
+        "displayName": "Action",
+        "purpose": "Primary and secondary button text."
+      },
+      "letter": {
+        "displayName": "Letter",
+        "purpose": "Heavy single-character word-board lettering."
+      }
+    },
+    "shadows": [
+      {
+        "name": "action-lift",
+        "value": "0 3px 5px -1px var(--green-dark)",
+        "purpose": "Primary action depth; illustrative colored pieces use related color-specific shadows."
+      },
+      {
+        "name": "preview-paper",
+        "value": "0 17px 35px -17px #253c2433",
+        "purpose": "Diffuse shadow below the illustrative white board."
+      },
+      {
+        "name": "score-slip",
+        "value": "0 12px 22px -15px #725e2a55",
+        "purpose": "Layered warm score slip."
+      },
+      {
+        "name": "modal-elevation",
+        "value": "0 20px 80px #17291f30",
+        "purpose": "Focused native dialog above its backdrop."
+      },
+      {
+        "name": "segment-selection",
+        "value": "0 2px 7px #23352310",
+        "purpose": "Light lift under the selected setup segment."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Shared expressive easing for button presses, illustration entrance, and letter reveals."
+      },
+      {
+        "name": "control-transition",
+        "value": "140ms",
+        "purpose": "Primary and secondary control background, transform, and shadow transitions."
+      },
+      {
+        "name": "key-transition",
+        "value": "100ms",
+        "purpose": "Touch key background and press transition."
+      },
+      {
+        "name": "tile-reveal",
+        "value": "320ms",
+        "purpose": "One rotateX reveal for an acknowledged tile."
+      },
+      {
+        "name": "tile-stagger",
+        "value": "55ms",
+        "purpose": "Per-cell delay in a revealed row."
+      },
+      {
+        "name": "board-entrance",
+        "value": "700ms",
+        "purpose": "Dealt illustration entrance with a 12px upward settling movement."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "600px"
+      },
+      {
+        "name": "stack-game-and-results",
+        "value": "850px"
+      },
+      {
+        "name": "compact-desktop",
+        "value": "1150px"
+      },
+      {
+        "name": "large-desktop",
+        "value": "1700px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Main room and match actions. The soft shadow gives the action a physical presence.",
+      "html": "<button class=\"ds-primary\">Create a room</button>",
+      "css": ".ds-primary{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:12px 22px;border-radius:var(--radius,12px);font-family:Manrope,Arial,sans-serif;font-size:13px;font-weight:800;line-height:1.5;cursor:pointer;transition:background .14s,transform .14s cubic-bezier(.16,1,.3,1),box-shadow .14s;border:0;background:var(--green,#426c48);color:var(--paper,#fff);box-shadow:0 3px 5px -1px var(--green-dark,#315637)}.ds-primary:hover:not(:disabled){background:var(--green-dark,#315637)}.ds-primary:active:not(:disabled){transform:translateY(2px)}.ds-primary:focus-visible{outline:3px solid var(--gold,#957121);outline-offset:4px;}.ds-primary:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-primary{transition:none}.ds-primary:active:not(:disabled){transform:none}}"
+    },
+    {
+      "name": "Secondary button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "A quieter outlined companion to the primary action.",
+      "html": "<button class=\"ds-secondary\">Join a room</button>",
+      "css": ".ds-secondary{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:12px 22px;border-radius:var(--radius,12px);font-family:Manrope,Arial,sans-serif;font-size:13px;font-weight:800;line-height:1.5;cursor:pointer;transition:background .14s,transform .14s cubic-bezier(.16,1,.3,1),box-shadow .14s;border:1px solid #cbd3c8;background:transparent;color:var(--ink,#24352d)}.ds-secondary:hover:not(:disabled){background:var(--mint,#e3eddd)}.ds-secondary:active:not(:disabled){transform:translateY(2px)}.ds-secondary:focus-visible{outline:3px solid var(--gold,#957121);outline-offset:4px;}.ds-secondary:disabled{opacity:.5;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-secondary{transition:none}.ds-secondary:active:not(:disabled){transform:none}}"
+    },
+    {
+      "name": "Labeled field",
+      "kind": "input",
+      "refersTo": "field",
+      "description": "Persistent labels and readable input text for player names and room entry.",
+      "html": "<label class=\"ds-label\" for=\"ds-player-name\">Your name<input class=\"ds-field\" id=\"ds-player-name\" placeholder=\"Choose a player name\" /></label>",
+      "css": ".ds-label{display:flex;flex-direction:column;gap:8px;font-family:Manrope,Arial,sans-serif;font-size:12px;font-weight:800;line-height:1.6;color:var(--ink,#24352d)}.ds-field{min-height:48px;width:100%;background:var(--paper,#fff);border:1px solid #c6d0c0;border-radius:10px;padding:12px 14px;font-family:Manrope,Arial,sans-serif;font-size:16px;font-weight:600;color:var(--ink,#24352d);caret-color:var(--green,#426c48)}.ds-field::placeholder{color:var(--muted,#58675c)}.ds-field:focus{outline:2px solid var(--green,#426c48);outline-offset:1px}"
+    },
+    {
+      "name": "Text navigation",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "A compact text action with an inline help icon and a clear keyboard outline.",
+      "html": "<nav class=\"ds-nav\" aria-label=\"Main navigation\"><button class=\"ds-nav-action\"><svg width=\"17\" height=\"17\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><path d=\"M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3m.08 4h.01\"/></svg>How to play</button></nav>",
+      "css": ".ds-nav{display:flex;gap:32px;align-items:center}.ds-nav-action{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 4px;min-height:44px;font-family:Manrope,Arial,sans-serif;font-size:13px;font-weight:700;border:0;background:transparent;color:var(--ink,#24352d);cursor:pointer}.ds-nav-action:hover{color:var(--green,#426c48);text-decoration:underline;text-underline-offset:5px}.ds-nav-action:focus-visible{outline:3px solid var(--gold,#957121);outline-offset:4px;}"
+    },
+    {
+      "name": "Mode tag",
+      "kind": "chip",
+      "refersTo": "tag",
+      "description": "A static matchup label that accompanies a mode name.",
+      "html": "<span class=\"ds-tag\">2 vs 2</span>",
+      "css": ".ds-tag{display:inline-block;font-family:Manrope,Arial,sans-serif;font-size:9px;font-weight:700;line-height:1.6;color:var(--muted,#58675c);border:1px solid #d1dac9;border-radius:4px;padding:1px 5px;white-space:nowrap}"
+    },
+    {
+      "name": "Mode choice",
+      "kind": "card",
+      "refersTo": "mode-card",
+      "description": "An interactive selection card; selected tint and a check marker reinforce the pressed state.",
+      "html": "<button class=\"ds-mode\" aria-pressed=\"true\"><span class=\"ds-mode-copy\"><strong>Free-for-all</strong><span>The whole group. Every player for themselves.</span></span><span class=\"ds-mode-check\" aria-hidden=\"true\"><svg width=\"11\" height=\"11\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"3\"><path d=\"m5 12 4 4L19 6\"/></svg></span></button>",
+      "css": ".ds-mode{display:flex;align-items:center;position:relative;text-align:left;border:1px solid var(--line,#dce2d8);border-radius:12px;padding:24px 18px;gap:14px;min-height:130px;max-width:360px;background:transparent;color:var(--ink,#24352d);font-family:Manrope,Arial,sans-serif;cursor:pointer;transition:background .14s,border-color .14s}.ds-mode:hover{background:#eef2e9;border-color:#aebfa6}.ds-mode[aria-pressed=true]{background:#edf2e6;border-color:#9bad8c}.ds-mode:focus-visible{outline:3px solid var(--gold,#957121);outline-offset:4px;}.ds-mode-copy>strong{display:block;font-size:14px}.ds-mode-copy>span{display:block;font-size:12px;line-height:1.7;margin-top:5px;max-width:170px;color:var(--muted,#58675c)}.ds-mode-check{position:absolute;right:10px;top:10px;width:17px;height:17px;border:1px solid #bdc9b5;border-radius:50%;display:grid;place-items:center}.ds-mode[aria-pressed=true] .ds-mode-check{background:var(--green,#426c48);border-color:var(--green,#426c48);color:white}@media(prefers-reduced-motion:reduce){.ds-mode{transition:none}}"
+    },
+    {
+      "name": "Segmented choices",
+      "kind": "custom",
+      "refersTo": "segmented",
+      "description": "Mode choices inside setup forms, with a white selected piece in a softly tinted tray.",
+      "html": "<fieldset class=\"ds-fieldset\"><legend class=\"ds-legend\">Game mode</legend><div class=\"ds-segment\"><button aria-pressed=\"false\">1v1</button><button aria-pressed=\"true\">2v2</button><button aria-pressed=\"false\">1 vs all</button></div></fieldset>",
+      "css": ".ds-fieldset{border:0;padding:0;margin:0}.ds-legend{font-family:Manrope,Arial,sans-serif;font-size:12px;font-weight:800;color:var(--ink,#24352d);padding:0;margin-bottom:8px}.ds-segment{display:flex;padding:5px;gap:4px;border:1px solid #d6dece;background:#e9eee3;border-radius:12px;max-width:360px}.ds-segment button{flex:1;min-height:40px;border:0;background:transparent;border-radius:8px;font-family:Manrope,Arial,sans-serif;font-size:12px;font-weight:800;color:var(--ink,#24352d);cursor:pointer}.ds-segment button[aria-pressed=true]{background:white;box-shadow:0 2px 7px #23352310;color:var(--green,#426c48)}.ds-segment button:focus-visible{outline:3px solid var(--gold,#957121);outline-offset:4px;}"
+    },
+    {
+      "name": "Letter feedback",
+      "kind": "custom",
+      "refersTo": "tile",
+      "description": "Aligned letter cells share the same semantics as keyboard feedback.",
+      "html": "<div class=\"ds-tiles\" role=\"group\" aria-label=\"Example letter feedback\"><span class=\"ds-tile ds-correct\" aria-label=\"W: correct position\">W</span><span class=\"ds-tile ds-present\" aria-label=\"O: wrong position\">O</span><span class=\"ds-tile ds-absent\" aria-label=\"R: absent\">R</span><span class=\"ds-tile\" aria-label=\"D: not submitted\">D</span><span class=\"ds-tile\" aria-label=\"empty\"></span></div>",
+      "css": ".ds-tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;width:min(100%,310px)}.ds-tile{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:white;border:2px solid #d3dccc;border-radius:4px;font-family:Manrope,Arial,sans-serif;font-weight:800;font-size:29px;line-height:1;color:var(--ink,#24352d)}.ds-tile.ds-correct{background:var(--green,#426c48);border-color:var(--green,#426c48);color:white}.ds-tile.ds-present{background:var(--gold,#957121);border-color:var(--gold,#957121);color:white}.ds-tile.ds-absent{background:var(--stone,#6b746d);border-color:var(--stone,#6b746d);color:white}"
+    },
+    {
+      "name": "Touch keyboard",
+      "kind": "custom",
+      "refersTo": "keyboard-key",
+      "description": "Flexible letter keys, wider Enter/Delete keys, and shared word-feedback colors.",
+      "html": "<div class=\"ds-keyboard\" role=\"group\" aria-label=\"On-screen keyboard sample\"><div class=\"ds-key-row\"><button class=\"ds-key \" aria-label=\"Q\">Q</button><button class=\"ds-key \" aria-label=\"W\">W</button><button class=\"ds-key ds-key-correct\" aria-label=\"E, correct\">E</button><button class=\"ds-key ds-key-present\" aria-label=\"R, present\">R</button><button class=\"ds-key ds-key-absent\" aria-label=\"T, absent\">T</button><button class=\"ds-key \" aria-label=\"Y\">Y</button><button class=\"ds-key \" aria-label=\"U\">U</button><button class=\"ds-key \" aria-label=\"I\">I</button><button class=\"ds-key \" aria-label=\"O\">O</button><button class=\"ds-key \" aria-label=\"P\">P</button></div><div class=\"ds-key-row\"><button class=\"ds-key \" aria-label=\"A\">A</button><button class=\"ds-key \" aria-label=\"S\">S</button><button class=\"ds-key \" aria-label=\"D\">D</button><button class=\"ds-key \" aria-label=\"F\">F</button><button class=\"ds-key \" aria-label=\"G\">G</button><button class=\"ds-key \" aria-label=\"H\">H</button><button class=\"ds-key \" aria-label=\"J\">J</button><button class=\"ds-key \" aria-label=\"K\">K</button><button class=\"ds-key \" aria-label=\"L\">L</button></div><div class=\"ds-key-row\"><button class=\"ds-key ds-wide\">ENTER</button><button class=\"ds-key \" aria-label=\"Z\">Z</button><button class=\"ds-key \" aria-label=\"X\">X</button><button class=\"ds-key \" aria-label=\"C\">C</button><button class=\"ds-key \" aria-label=\"V\">V</button><button class=\"ds-key \" aria-label=\"B\">B</button><button class=\"ds-key \" aria-label=\"N\">N</button><button class=\"ds-key \" aria-label=\"M\">M</button><button class=\"ds-key ds-wide\" aria-label=\"Delete letter\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" aria-hidden=\"true\"><path d=\"M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2Z\"/><path d=\"m18 9-6 6m0-6 6 6\"/></svg></button></div></div>",
+      "css": ".ds-keyboard{width:min(100%,490px);display:grid;gap:6px;user-select:none}.ds-key-row{display:flex;gap:5px;justify-content:center}.ds-key-row:nth-child(2){padding-inline:20px}.ds-key{display:grid;place-items:center;background:#e7ebe3;border:0;border-radius:5px;color:var(--ink,#24352d);height:46px;flex:1;max-width:43px;padding:0;font-family:Manrope,Arial,sans-serif;font-size:12px;font-weight:800;cursor:pointer;transition:background .1s,transform .1s}.ds-key:hover:not(:disabled){background:#cfdac5}.ds-key:active:not(:disabled){transform:translateY(2px)}.ds-key:focus-visible{outline:3px solid var(--gold,#957121);outline-offset:4px;}.ds-key.ds-wide{flex:1.6;max-width:65px;font-size:10px}.ds-key.ds-key-correct{background:var(--green,#426c48);color:white}.ds-key.ds-key-present{background:var(--gold,#957121);color:white}.ds-key.ds-key-absent{background:var(--stone,#6b746d);color:white}.ds-key:disabled{opacity:.65;cursor:not-allowed}@media(prefers-reduced-motion:reduce){.ds-key{transition:none}}"
+    },
+    {
+      "name": "Room panel",
+      "kind": "card",
+      "refersTo": "room-panel",
+      "description": "A quiet paper container for the lobby, with a thin stroke and restrained heading.",
+      "html": "<section class=\"ds-panel\"><h2>Your room</h2><p>Invite your friends with the room code.</p></section>",
+      "css": ".ds-panel{background:var(--paper,#fff);border:1px solid var(--line,#dce2d8);padding:32px;border-radius:20px;color:var(--ink,#24352d)}.ds-panel h2{font-family:Fredoka,sans-serif;font-size:23px;font-weight:500;line-height:1.15;margin:0 0 16px}.ds-panel p{font-family:Manrope,Arial,sans-serif;font-size:12px;line-height:1.6;margin:0;color:var(--muted,#58675c)}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The tabletop word arena.",
+    "overview": "Word Rally feels like friends gathering around a well-made word game: chalk-white paper, forest-green pieces, mustard-gold feedback, rounded lettering, and precise five-column grids. The material comes from the game itself. Letters, score slips, and softly lifted pieces provide the character.\n\nThe same world becomes quieter around live play. Reading, entering a guess, seeing the remaining time, and comparing scores take priority over decoration. This document records the implemented reusable system. Route modes, narrative order, preview composition, and the development direction contract belong in `.impeccable/surfaces/app-page-tsx.md`.",
+    "keyCharacteristics": [
+      "Rounded display lettering paired with compact, clear operational type.",
+      "Stable semantic letter colors shared by boards and keyboards.",
+      "Tonal paper surfaces with thin separators and selective soft lift.",
+      "Responsive density that keeps the board and touch keyboard together."
+    ],
+    "rules": [
+      {
+        "name": "The Shared Feedback Rule",
+        "body": "Correct, present, and absent states keep the same meaning on the board, keyboard, and legend. Retain written descriptions and accessible letter-state names alongside color.",
+        "section": "colors"
+      },
+      {
+        "name": "The Two Voices Rule",
+        "body": "Use Fredoka for identity and headings; use Manrope for operational information and game characters. Preserve the heavier weight of letter tiles and keys.",
+        "section": "typography"
+      }
+    ],
+    "dos": [
+      "Do preserve shared letter-state meaning across tiles, keys, accessible names, and the legend.",
+      "Do use the local Fredoka and Manrope assets with their declared variable weight ranges.",
+      "Do keep important actions, timer, board, and touch keyboard legible when changing phone layouts.",
+      "Do reserve shadows for the existing material roles and keep operational letter grids aligned.",
+      "Do pair color feedback with text and visible focus, and honor reduced-motion preferences."
+    ],
+    "donts": [
+      "Don't replace absent-letter stone with a low-contrast decorative gray or lighten gold behind white letter text.",
+      "Don't promote preview scores, players, or timestamps into claims about actual room activity.",
+      "Don't copy decorative board rotation onto the playable matrix.",
+      "Don't turn this document into a route-composition plan or expose the development direction contract in the interface."
+    ]
+  }
+}
