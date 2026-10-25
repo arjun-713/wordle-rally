@@ -29,6 +29,8 @@ Choose **Play Wordle Unlimited** on the home page, or open `/unlimited`, to play
    RALLY_DAILY_SECRET=your-64-character-random-hex-secret
    ```
 
+   The native Vercel Marketplace pair `KV_REST_API_URL` and `KV_REST_API_TOKEN` is also accepted automatically. Keep the normal read/write token; the read-only token cannot save games. Complete explicit `UPSTASH_REDIS_*` credentials take precedence, and credentials from different pairs are never mixed. No credential copying is needed when the Marketplace integration creates its standard variables.
+
 4. Generate the daily secret once with `node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"` and save it as a sensitive environment variable. Keep it stable: changing it changes the daily ordering.
 5. Verify `npm test`, `npm run test:e2e`, and `npm run build`, then deploy using `vercel deploy --prod`. `vercel.json` places functions in Mumbai (`bom1`) beside the Redis region and disables automatic Git deployments so publishing happens through the tested CLI workflow. No WebSocket process, background worker, scheduled job, or writable production filesystem is required.
 

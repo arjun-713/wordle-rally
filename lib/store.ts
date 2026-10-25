@@ -15,12 +15,21 @@ const directory = path.join(
   process.env.RALLY_DATA_NAMESPACE ?? "",
 );
 const file = path.join(directory, "state.json");
+export function redisCredentials(
+  env: Record<string, string | undefined> = process.env,
+): { url: string; token: string } | null {
+  for (const [urlKey, tokenKey] of [
+    ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN"],
+    ["KV_REST_API_URL", "KV_REST_API_TOKEN"],
+  ]) {
+    const url = env[urlKey],
+      token = env[tokenKey];
+    if (url && token) return { url, token };
+  }
+  return null;
+}
 export function storageMode(): "redis" | "local" {
-  if (
-    process.env.UPSTASH_REDIS_REST_URL &&
-    process.env.UPSTASH_REDIS_REST_TOKEN
-  )
-    return "redis";
+  if (redisCredentials()) return "redis";
   if (
     process.env.VERCEL ||
     (process.env.NODE_ENV === "production" &&
@@ -34,10 +43,13 @@ export function storageMode(): "redis" | "local" {
   return "local";
 }
 async function command<T>(args: (string | number)[]): Promise<T> {
-  const response = await fetch(process.env.UPSTASH_REDIS_REST_URL!, {
+  const credentials = redisCredentials();
+  if (!credentials)
+    throw new GameError("Redis storage is not configured.", 503);
+  const response = await fetch(credentials.url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+      Authorization: `Bearer ${credentials.token}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify(args),
