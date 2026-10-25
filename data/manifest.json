@@ -1,0 +1,31 @@
+{
+  "generated": "2026-10-24T18:45:02.190Z",
+  "sources": [
+    {
+      "name": "dictionary",
+      "repo": "dwyl/english-words",
+      "revision": "20f5cc9b3f0ccc8ce45d814c532b7c2031bba31c",
+      "url": "https://raw.githubusercontent.com/dwyl/english-words/20f5cc9b3f0ccc8ce45d814c532b7c2031bba31c/words_alpha.txt",
+      "count": 370105,
+      "sha256": "3ed0c94610d8bcf7c11bbb49c56aa49c7234d32b66824df91f554169e572da48"
+    },
+    {
+      "name": "wordle",
+      "repo": "tabatkins/wordle-list",
+      "revision": "255b9469c4dad99a3b95cc4ddbe139b3d3747868",
+      "url": "https://raw.githubusercontent.com/tabatkins/wordle-list/255b9469c4dad99a3b95cc4ddbe139b3d3747868/words",
+      "count": 14855,
+      "sha256": "9df5dad1b44cf1b9e0fa7c3ebff94d69ff7efb59f8691ac88e74e1c7b3da121e"
+    },
+    {
+      "name": "frequency",
+      "repo": "first20hours/google-10000-english",
+      "revision": "d0736d492489198e4f9d650c7ab4143bc14c1e9e",
+      "url": "https://raw.githubusercontent.com/first20hours/google-10000-english/d0736d492489198e4f9d650c7ab4143bc14c1e9e/google-10000-english-no-swears.txt",
+      "count": 9894,
+      "sha256": "d6b3e04f1ac30be6525d41474166c0bff28486ecd8c48dcb0ab9c7c9cc05ed86"
+    }
+  ],
+  "guesses": 20148,
+  "answers": 1272
+}
