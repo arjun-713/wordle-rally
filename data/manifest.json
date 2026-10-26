@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-24T18:45:02.190Z",
+  "generated": "2026-10-26T11:51:13.674Z",
   "sources": [
     {
       "name": "dictionary",
@@ -27,5 +27,11 @@
     }
   ],
   "guesses": 20148,
-  "answers": 1272
+  "answers": 14877,
+  "answerPolicy": {
+    "baseline": 1272,
+    "minimum": 12720,
+    "familiarFirst": 1272,
+    "expansion": "Filtered Wordle vocabulary; includes uncommon, regional and inflected words."
+  }
 }

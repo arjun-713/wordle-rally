@@ -53,15 +53,29 @@ for (const [name, repo, branch, file, license] of sources) {
 const valid = new Set(
   [...data.dictionary, ...data.wordle].filter((w) => w.length === 5),
 );
-// Familiar frequency-ranked words only; remove proper names, abbreviations, and unsuitable answers.
+// Keep frequency-ranked words first for the Familiar pool. Expand the other
+// pools from a Wordle-specific list, rather than arbitrary dictionary entries.
 const blocked = new Set(
-  "jesus christ islam hindu bible satan penis pussy bitch fucks nudes naked porno boobs booty sperm slave lynch negro niger dildo raped rapes rapist allah jihad jihad iraqi china japan india texas miami paris tokyo korea spain wales peter david james smith jones brown white black kevin laura steve henry julie scott clark roger marie susan sarah linux yahoo gmail intel adobe honda nokia canon epson admin login email https fonts htmls mysql proxy cache bytes ascii".split(
+  "jesus christ islam hindu bible satan penis pussy bitch fucks nudes naked porno boobs booty sperm slave lynch negro niger dildo raped rapes rapist allah jihad iraqi china japan india texas miami paris tokyo korea spain wales peter david james smith jones brown white black kevin laura steve henry julie scott clark roger marie susan sarah linux yahoo gmail intel adobe honda nokia canon epson admin login email https fonts htmls mysql proxy cache bytes ascii cunts cunty shits shite whore sluts skank fanny fagot faggy nigga paki coons chink spics kikes wanky wanks wanka pricks twats titsy knobz cocks cacky fucky fucko fubar".split(
     " ",
   ),
 );
-const answers = data.frequency.filter(
+const familiar = data.frequency.filter(
   (w) => w.length === 5 && valid.has(w) && !blocked.has(w),
 );
+const answers = [
+  ...new Set([
+    ...familiar,
+    ...data.wordle
+      .filter((w) => w.length === 5 && valid.has(w) && !blocked.has(w))
+      .sort(),
+  ]),
+];
+const minimumAnswers = 1272 * 10;
+if (answers.length < minimumAnswers)
+  throw new Error(
+    `Answer expansion requires at least ${minimumAnswers} distinct words.`,
+  );
 await writeFile("data/dictionary.txt.gz", gzipSync(data.dictionary.join("\n")));
 await writeFile("data/guesses.json", JSON.stringify([...valid].sort()));
 await writeFile("data/answers.json", JSON.stringify(answers));
@@ -73,11 +87,18 @@ await writeFile(
       sources: manifest,
       guesses: valid.size,
       answers: answers.length,
+      answerPolicy: {
+        baseline: 1272,
+        minimum: minimumAnswers,
+        familiarFirst: familiar.length,
+        expansion:
+          "Filtered Wordle vocabulary; includes uncommon, regional and inflected words.",
+      },
     },
     null,
     2,
   ),
 );
 console.log(
-  `${data.dictionary.length} dictionary entries; ${valid.size} five-letter guesses; ${answers.length} familiar answers`,
+  `${data.dictionary.length} dictionary entries; ${valid.size} five-letter guesses; ${answers.length} playable answers`,
 );
