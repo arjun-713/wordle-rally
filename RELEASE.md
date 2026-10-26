@@ -13,6 +13,22 @@ The release audit exercises separate browser identities in duels, teams, free-fo
 
 Release run: **48 rule/service tests passed** on both the file backend and real Redis; **15 browser flows passed in one full run**; TypeScript and production build passed; `npm audit --omit=dev` reported **0 vulnerabilities**. All 16 production client JavaScript files were scanned for server answer-array, history-key, and daily-secret markers; none were found.
 
+### Multiplayer read optimization
+
+The follow-up optimization passed **54 rule/service tests** on both file storage and real Redis, TypeScript, and a production build. The original 15 browser flows passed together; the added synchronization regression passed after correcting its expected results-heading label. That regression checks slower polling, no extra read after a guess, hidden-tab suspension, an immediate visibility wake-up, finished-host suspension, and guest detection of a rematch. API checks also cover private, minimal unchanged-revision responses and membership validation.
+
+Room polling now normally waits five seconds, slowing to fifteen seconds after 45 seconds without a change. Hidden tabs stop, completed hosts stop, and waiting guests gradually slow to thirty seconds. Deadline wake-ups remain independent of that quiet-period delay. A server-only Next.js Data Cache snapshot shares reads between players, with mutation tag invalidation, a ten-second cache-key window, per-player response filtering, and fresh reads whenever the client's known revision or a timed deadline requires them. Writes always use fresh state and atomic compare-and-set. Histories and stats reads use MGET, while persistent transaction writes use MSET.
+
+An isolated production-build comparison sent five polls per player, one second apart, with the snapshot cache disabled and enabled. Real Redis command statistics measured:
+
+| Players | Reads without snapshot cache | Reads with snapshot cache | Reduction |
+| ------- | ---------------------------: | ------------------------: | --------: |
+| 2       |                           10 |                         1 |       90% |
+| 4       |                           20 |                         1 |       95% |
+| 16      |                           80 |                         1 |    98.75% |
+
+The same benchmark verified cache invalidation after a guess and that cached snapshots never expose another player's board or an active answer. Run `npm run benchmark:reads` after a production build, with an isolated local Redis server on port 6389 and no other Redis workloads running. This measures quiet polling on local production servers, rather than hosted throughput or guaranteed free-plan play time. Active moves, cold instances, Vercel cache usage, HTTP requests, and bandwidth also affect capacity.
+
 - Game rules, privacy, CAS concurrency, no-repeat histories, scoring, tournaments, and streaming request bounds.
 - Browser reloads, two-player rooms, four-player team totals, free-for-all, exhausted attempts, old-response races, host authorization, blocked rosters, shared daily progress, and saved statistics.
 - Sensitive-path probes for `.env.local`, `.git/config`, `.data/state.json`, and answer JSON files. API responses must exclude raw identity cookies, active answers, future answers, and opponents' guess words.

@@ -42,7 +42,10 @@ export function storageMode(): "redis" | "local" {
   }
   return "local";
 }
-async function command<T>(args: (string | number)[]): Promise<T> {
+async function command<T>(
+  args: (string | number)[],
+  snapshot?: { tag: string; window: number },
+): Promise<T> {
   const credentials = redisCredentials();
   if (!credentials)
     throw new GameError("Redis storage is not configured.", 503);
@@ -51,9 +54,13 @@ async function command<T>(args: (string | number)[]): Promise<T> {
     headers: {
       Authorization: `Bearer ${credentials.token}`,
       "Content-Type": "application/json",
+      ...(snapshot
+        ? { "X-Rally-Snapshot-Window": String(snapshot.window) }
+        : {}),
     },
     body: JSON.stringify(args),
-    cache: "no-store",
+    cache: snapshot ? "force-cache" : "no-store",
+    ...(snapshot ? { next: { revalidate: 20, tags: [snapshot.tag] } } : {}),
     signal: AbortSignal.timeout(8000),
   });
   if (!response.ok)
@@ -84,19 +91,57 @@ export async function read(key: string): Promise<string | null> {
     ? item.value
     : null;
 }
+export async function readMany(keys: string[]): Promise<(string | null)[]> {
+  if (!keys.length) return [];
+  if (storageMode() === "redis") return command(["MGET", ...keys]);
+  const data = await readLocal(),
+    now = Date.now();
+  return keys.map((key) => {
+    const item = data[key];
+    return item && (!item.expires || item.expires > now) ? item.value : null;
+  });
+}
+export const roomCacheTag = (code: string) => `rally-room:${code}`;
+export const roomCacheEnabled = () =>
+  storageMode() === "redis" && process.env.RALLY_DISABLE_ROOM_CACHE !== "true";
+// Collapse concurrent cold-cache requests within a function instance. Only
+// in-flight work is held here; persisted snapshots live in Next's Data Cache.
+const roomReads = new Map<string, Promise<string | null>>();
+// Only the raw server snapshot is shared. User-specific responses stay private.
+// The window is part of fetch's cache key, so an old snapshot is never reused
+// beyond ten seconds, including when Redis is unavailable during revalidation.
+export function readRoomCached(
+  code: string,
+  now = Date.now(),
+): Promise<string | null> {
+  const window = Math.floor(now / 10000),
+    key = `${code}:${window}`;
+  const existing = roomReads.get(key);
+  if (existing) return existing;
+  const pending = command<string | null>(["GET", `rally:room:${code}`], {
+    tag: roomCacheTag(code),
+    window,
+  }).finally(() => roomReads.delete(key));
+  roomReads.set(key, pending);
+  return pending;
+}
 const casScript = `
+local actual = redis.call('MGET',unpack(KEYS))
 for i,key in ipairs(KEYS) do
- local actual = redis.call('GET',key)
  local expected = ARGV[(i-1)*3+1]
- if (actual or '') ~= expected then return 0 end
+ if (actual[i] or '') ~= expected then return 0 end
 end
+local persistent = {}
 for i,key in ipairs(KEYS) do
  local value = ARGV[(i-1)*3+2]
  local ttl = tonumber(ARGV[(i-1)*3+3])
- if ttl > 0 then redis.call('SET',key,value,'EX',ttl) else redis.call('SET',key,value) end
+ if ttl > 0 then redis.call('SET',key,value,'EX',ttl)
+ else table.insert(persistent,key); table.insert(persistent,value) end
 end
+if #persistent > 0 then redis.call('MSET',unpack(persistent)) end
 return 1`;
 export async function compareAndSet(writes: Write[]): Promise<boolean> {
+  if (!writes.length) return true;
   if (storageMode() === "redis") {
     return (
       (await command<number>([

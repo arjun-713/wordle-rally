@@ -20,7 +20,8 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import type { Player, PublicRoom } from "@/lib/types";
+import { roomPollDelay } from "@/lib/room-polling";
+import type { Player, PublicRoom, RoomSyncReply } from "@/lib/types";
 import { MODES } from "@/lib/types";
 import Link from "next/link";
 import {
@@ -70,6 +71,11 @@ export default function RoomClient({ code }: { code: string }) {
   const [confirmLeave, setConfirmLeave] = useState(false);
   const busyRef = useRef(false);
   const currentRef = useRef<PublicRoom | null>(null);
+  const changedAt = useRef(Date.now());
+  const clockOffset = useRef(0);
+  const polling = useRef<{ pause: () => void; resume: () => void } | null>(
+    null,
+  );
   const apply = useCallback((next: PublicRoom) => {
     const prev = currentRef.current;
     if (prev && next.revision < prev.revision) return;
@@ -80,6 +86,9 @@ export default function RoomClient({ code }: { code: string }) {
     ) {
       setError("");
     }
+    if (!prev || prev.revision !== next.revision)
+      changedAt.current = Date.now();
+    clockOffset.current = next.serverTime - Date.now();
     currentRef.current = next;
     setRoom(next);
     setOffset(next.serverTime - Date.now());
@@ -89,52 +98,95 @@ export default function RoomClient({ code }: { code: string }) {
   useEffect(() => {
     setName(savedName());
     let stopped = false,
-      timer: ReturnType<typeof setTimeout>;
-    let controller: AbortController;
-    async function poll() {
-      if (stopped) return;
-      if (document.visibilityState === "hidden" || busyRef.current) {
-        timer = setTimeout(poll, 1500);
+      fatal = false,
+      epoch = 0,
+      failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let controller: AbortController | undefined;
+    function pause() {
+      epoch++;
+      clearTimeout(timer);
+      controller?.abort();
+    }
+    function schedule(delay?: number) {
+      clearTimeout(timer);
+      if (
+        stopped ||
+        fatal ||
+        document.visibilityState === "hidden" ||
+        busyRef.current
+      )
         return;
-      }
+      const wait =
+        delay ??
+        roomPollDelay(
+          currentRef.current,
+          Date.now() - changedAt.current,
+          Date.now() + clockOffset.current,
+          failures,
+        );
+      if (wait !== null) timer = setTimeout(poll, wait);
+    }
+    async function poll() {
+      if (stopped || document.visibilityState === "hidden" || busyRef.current)
+        return;
+      const attempt = ++epoch;
       controller = new AbortController();
+      const current = currentRef.current;
       try {
-        const next = await api<PublicRoom>(
-          `/api/rooms/${code}`,
+        const next = await api<RoomSyncReply>(
+          `/api/rooms/${code}${current ? `?revision=${current.revision}` : ""}`,
           undefined,
           controller.signal,
         );
-        if (!stopped) apply(next);
+        if (stopped || attempt !== epoch) return;
+        failures = 0;
+        if ("unchanged" in next) {
+          clockOffset.current = next.serverTime - Date.now();
+          setOffset(clockOffset.current);
+          setNetwork(false);
+        } else apply(next);
       } catch (e) {
-        if (stopped) return;
+        if (stopped || attempt !== epoch) return;
         const err = e as Error & { status?: number };
+        fatal = err.status === 403 || err.status === 404;
+        failures++;
         if (err.status === 403) setNeedsJoin(true);
         else if (!currentRef.current) setError(err.message);
         else setNetwork(true);
       } finally {
-        if (!stopped) {
+        if (!stopped && attempt === epoch) {
           setLoading(false);
-          timer = setTimeout(
-            poll,
-            currentRef.current?.status === "playing" ? 1000 : 2500,
-          );
+          schedule();
         }
       }
     }
-    poll();
-    const visibility = () => {
+    function wake() {
+      pause();
       if (document.visibilityState === "visible") {
-        clearTimeout(timer);
-        controller?.abort();
-        timer = setTimeout(poll, 100);
+        fatal = false;
+        failures = 0;
+        schedule(0);
       }
+    }
+    const controls = {
+      pause,
+      resume: () => {
+        fatal = false;
+        failures = 0;
+        schedule();
+      },
     };
-    document.addEventListener("visibilitychange", visibility);
+    polling.current = controls;
+    void poll();
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
     return () => {
       stopped = true;
-      clearTimeout(timer);
-      controller?.abort();
-      document.removeEventListener("visibilitychange", visibility);
+      pause();
+      if (polling.current === controls) polling.current = null;
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
     };
   }, [code, apply]);
   useEffect(() => {
@@ -145,6 +197,7 @@ export default function RoomClient({ code }: { code: string }) {
   async function action(data: Record<string, unknown>) {
     if (busyRef.current) return;
     busyRef.current = true;
+    polling.current?.pause();
     setBusy(true);
     setError("");
     try {
@@ -156,6 +209,7 @@ export default function RoomClient({ code }: { code: string }) {
     } finally {
       busyRef.current = false;
       setBusy(false);
+      polling.current?.resume();
     }
   }
   const current = room?.current;

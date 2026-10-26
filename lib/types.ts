@@ -131,3 +131,6 @@ export type StatsBook = {
   matchesWon: number;
   points: number;
 };
+
+export type RoomSyncReply =
+  PublicRoom | { unchanged: true; revision: number; serverTime: number };

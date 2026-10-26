@@ -1,4 +1,5 @@
 import { body, identity, respond } from "@/lib/http";
+import { invalidateRoom } from "@/lib/room-cache";
 import { createRoom } from "@/lib/service";
 import { rateLimit } from "@/lib/store";
 export const runtime = "nodejs";
@@ -7,6 +8,8 @@ export async function POST(request: Request) {
     const input = await body(request),
       id = await identity();
     await rateLimit(id, "create", 8);
-    return createRoom(id, input);
+    const room = await createRoom(id, input);
+    invalidateRoom(room.code);
+    return room;
   });
 }

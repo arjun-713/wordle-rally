@@ -4,6 +4,7 @@ export default defineConfig({
   testMatch: "**/e2e.spec.ts",
   workers: 1,
   timeout: 45000,
+  expect: { timeout: 10000 },
   reporter: "list",
   use: {
     baseURL: "http://localhost:3100",

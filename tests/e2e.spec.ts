@@ -1125,6 +1125,25 @@ test("room APIs and static routes do not disclose cookies, opponents guesses, or
   const response = await page.request.get(`/api/rooms/${room.code}`),
     view: PublicRoom = await response.json();
   expect(response.headers()["cache-control"]).toContain("no-store");
+  const unchanged = await page.request.get(
+    `/api/rooms/${room.code}?revision=${view.revision}`,
+  );
+  expect(unchanged.headers()["cache-control"]).toContain("no-store");
+  expect(await unchanged.json()).toEqual({
+    unchanged: true,
+    revision: view.revision,
+    serverTime: expect.any(Number),
+  });
+  expect(
+    (await page.request.get(`/api/rooms/${room.code}?revision=-1`)).status(),
+  ).toBe(400);
+  expect(
+    (
+      await outsider.request.get(
+        `/api/rooms/${room.code}?revision=${view.revision}`,
+      )
+    ).status(),
+  ).toBe(403);
   expect(view.current!.guesses).toHaveLength(0);
   expect(view.players.every((p) => p.score === 0)).toBe(true);
   for (const r of privateState.rounds)
@@ -1163,4 +1182,100 @@ test("room APIs and static routes do not disclose cookies, opponents guesses, or
   expect(stale.status()).toBe(409);
   await friend.close();
   await outsider.close();
+});
+
+test("room sync avoids redundant reads, pauses hidden tabs and finished hosts, and still detects rematches", async ({
+  page,
+  browser,
+}) => {
+  const friend = await browser.newContext({ baseURL: "http://localhost:3100" });
+  try {
+    const room: PublicRoom = await (
+      await page.request.post("/api/rooms", {
+        data: {
+          name: "Efficient Host",
+          config: { mode: "duel", players: 2, rounds: 1, seconds: 0 },
+        },
+      })
+    ).json();
+    await friend.request.post(`/api/rooms/${room.code}`, {
+      data: { action: "join", name: "Efficient Rival" },
+    });
+    const started: PublicRoom = await (
+      await page.request.post(`/api/rooms/${room.code}`, {
+        data: { action: "start" },
+      })
+    ).json();
+    let reads = 0;
+    page.on("request", (request) => {
+      if (
+        request.method() === "GET" &&
+        request.url().includes(`/api/rooms/${room.code}`)
+      )
+        reads++;
+    });
+    await page.goto(`/room/${room.code}`);
+    await expect(page.getByLabel("Type your five-letter guess")).toBeVisible();
+    const initialReads = reads;
+    await page.waitForTimeout(2200);
+    expect(reads).toBe(initialReads);
+    const answer = (await secret(room.code)).rounds[0].answer;
+    await page.getByLabel("Type your five-letter guess").fill(answer);
+    await page
+      .getByRole("button", { name: "Submit guess", exact: true })
+      .click();
+    await expect(
+      page.getByText("You got it. +1 point!", { exact: true }),
+    ).toBeVisible();
+    const acknowledgedReads = reads;
+    await page.waitForTimeout(500);
+    expect(reads).toBe(acknowledgedReads);
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "hidden",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.waitForTimeout(5500);
+    expect(reads).toBe(acknowledgedReads);
+    await friend.request.post(`/api/rooms/${room.code}`, {
+      data: {
+        action: "guess",
+        round: 0,
+        matchId: started.matchId,
+        word: answer,
+      },
+    });
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        value: "visible",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await expect(
+      page.getByRole("button", { name: "Set up a rematch", exact: true }),
+    ).toBeVisible();
+    const finishedReads = reads;
+    await page.clock.install();
+    await page.clock.fastForward(120000);
+    expect(reads).toBe(finishedReads);
+    const guest = await friend.newPage();
+    await guest.goto(`/room/${room.code}`);
+    await expect(
+      guest.getByRole("heading", { name: "Round breakdown", exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Set up a rematch", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "The rivalry starts here." }),
+    ).toBeVisible();
+    await expect(
+      guest.getByRole("heading", { name: "The rivalry starts here." }),
+    ).toBeVisible();
+  } finally {
+    await friend.close();
+  }
 });

@@ -11,7 +11,8 @@
     "words:sync": "node scripts/sync-words.mjs",
     "test:e2e": "playwright test",
     "format": "prettier --write app components lib tests scripts *.ts *.json *.md",
-    "test:redis": "node scripts/test-redis.mjs"
+    "test:redis": "node scripts/test-redis.mjs",
+    "benchmark:reads": "node scripts/benchmark-reads.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

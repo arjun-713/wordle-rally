@@ -14,7 +14,7 @@ import {
   validateConfig,
   pointsForGuess,
 } from "./engine";
-import { compareAndSet, read, storageMode } from "./store";
+import { compareAndSet, read, readMany, storageMode } from "./store";
 const valid = new Set(guesses);
 const roomKey = (code: string) => `rally:room:${code}`;
 const historyKey = (id: string) => `rally:history:${id}`;
@@ -45,6 +45,46 @@ export function publicRoom(
       : null,
     results: rounds.filter((r) => r.ended).map((r) => roundResult(room, r)),
   };
+}
+export async function roomSnapshot(
+  code: string,
+  id: string,
+  load: () => Promise<string | null>,
+  minimumRevision = 0,
+  now?: number,
+): Promise<{ view: PublicRoom; fresh: boolean }> {
+  requireGame(
+    /^[A-Z2-9]{6}$/.test(code),
+    "Enter a valid six-character room code.",
+  );
+  requireGame(
+    Number.isSafeInteger(minimumRevision) && minimumRevision >= 0,
+    "Invalid room revision.",
+  );
+  const raw = await load();
+  const checkedAt = now ?? Date.now();
+  requireGame(
+    raw,
+    "Room not found. Check the code or ask your host to create a new room.",
+    404,
+  );
+  const room: Room = JSON.parse(raw),
+    round = room.rounds[room.round];
+  // Writes and deadline settlement always use fresh Redis data and CAS. A just
+  // joined player can also bypass an older cached membership list immediately.
+  if (
+    !room.players.some((p) => p.id === id) ||
+    room.revision < minimumRevision ||
+    (room.status !== "lobby" && !room.matchId) ||
+    (room.status === "playing" &&
+      round &&
+      !round.ended &&
+      room.config.seconds !== 0 &&
+      checkedAt >= round.endsAt)
+  ) {
+    return { view: await roomAction(code, id), fresh: true };
+  }
+  return { view: publicRoom(room, id, checkedAt), fresh: false };
 }
 export async function createRoom(
   id: string,
@@ -181,8 +221,17 @@ export async function roomAction(
       return entry.book;
     };
     const recordFinished = async () => {
-      if (room.rounds.some((r) => r.ended && !r.recorded))
-        await Promise.all(room.players.map((p) => bookFor(p.id)));
+      if (
+        room.rounds.some((r) => r.ended && !r.recorded) ||
+        (room.status === "finished" &&
+          !(room.matches ?? []).some((m) => m.number === (room.match ?? 0) + 1))
+      ) {
+        const missing = room.players.filter((p) => !books.has(p.id));
+        const raws = await readMany(missing.map((p) => statsKey(p.id)));
+        missing.forEach((p, i) =>
+          books.set(p.id, { raw: raws[i], book: parseStats(raws[i]) }),
+        );
+      }
       for (const r of room.rounds) {
         if (!r.ended || r.recorded) continue;
         for (const p of room.players) {
@@ -239,12 +288,12 @@ export async function roomAction(
             room.players.filter((p) => p.team === 1).length === 2,
           "Each team needs exactly two players.",
         );
-      const histories = await Promise.all(
-        room.players.map(async (p) => ({
-          key: historyKey(p.id),
-          raw: await read(historyKey(p.id)),
-        })),
-      );
+      const historyKeys = room.players.map((p) => historyKey(p.id));
+      const historyValues = await readMany(historyKeys);
+      const histories = historyKeys.map((key, i) => ({
+        key,
+        raw: historyValues[i],
+      }));
       const excluded = new Set<string>(
         histories.flatMap((h) =>
           h.raw ? (JSON.parse(h.raw) as string[]) : [],
