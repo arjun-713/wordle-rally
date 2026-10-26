@@ -1,1 +1,18 @@
-{"buildPath":"code"}
+{
+  "buildPath": "code",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "app/globals.css"
+        ],
+        "createdAt": "2026-10-26T12:14:00.111Z",
+        "reason": "User brief requests flat tactile tiles with confident borders and subtle bottom-edge depth. Reviewed .key at L758: this is a neutral keyboard-key bottom edge with 5px corners, not an accent border on a card; preserve the implemented tactile design."
+      }
+    ]
+  }
+}
