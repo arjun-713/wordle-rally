@@ -34,6 +34,17 @@ async function soloSecret(gameId: string): Promise<SoloGame> {
 test("Wordle Unlimited saves progress, accepts touch guesses, tracks streaks, and keeps fresh words coming", async ({
   page,
 }) => {
+  async function nextWord(): Promise<PublicSoloGame> {
+    const acknowledged = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/solo" &&
+        response.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Next word", exact: true }).click();
+    const response = await acknowledged;
+    expect(response.ok()).toBe(true);
+    return response.json();
+  }
   await page.goto("/");
   await page.getByRole("link", { name: "Play Wordle Unlimited" }).click();
   await expect(
@@ -75,8 +86,7 @@ test("Wordle Unlimited saves progress, accepts touch guesses, tracks streaks, an
   await expect(
     page.getByText("That’s the word. Nice one!", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Next word", exact: true }).click();
-  game = await (await page.request.get("/api/solo")).json();
+  game = await nextWord();
   const second = await soloSecret(game.id);
   expect(second.answer).not.toBe(original.answer);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -96,9 +106,8 @@ test("Wordle Unlimited saves progress, accepts touch guesses, tracks streaks, an
   await expect(
     page.getByText("That’s the word. Nice one!", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Next word", exact: true }).click();
+  game = await nextWord();
   await page.setViewportSize({ width: 1440, height: 1050 });
-  game = await (await page.request.get("/api/solo")).json();
   const third = await soloSecret(game.id);
   expect([original.answer, second.answer]).not.toContain(third.answer);
   let attempt = 0;
@@ -129,7 +138,7 @@ test("Wordle Unlimited saves progress, accepts touch guesses, tracks streaks, an
         .analyze()
     ).violations,
   ).toEqual([]);
-  await page.getByRole("button", { name: "Next word", exact: true }).click();
+  await nextWord();
   await expect(
     page.getByText("Just you and five letters.", { exact: true }),
   ).toBeVisible();

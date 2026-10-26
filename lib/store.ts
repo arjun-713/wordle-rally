@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { GameError } from "./engine";
+import { ReservationLimiter } from "./rate-reservations";
 type Write = {
   key: string;
   expected: string | null;
@@ -188,13 +189,47 @@ export async function compareAndSet(writes: Write[]): Promise<boolean> {
     await rm(lock, { recursive: true, force: true });
   }
 }
+async function reserveRateSlots(key: string, amount: number, maximum: number) {
+  if (storageMode() === "redis")
+    return command<number>([
+      "EVAL",
+      `local used=tonumber(redis.call('GET',KEYS[1]) or '0')
+local amount=math.min(tonumber(ARGV[1]),math.max(0,tonumber(ARGV[2])-used))
+if amount>0 then redis.call('SET',KEYS[1],used+amount,'EX',60) end
+return amount`,
+      1,
+      key,
+      amount,
+      maximum,
+    ]);
+  for (let retry = 0; retry < 8; retry++) {
+    const old = await read(key),
+      used = Number(old ?? 0),
+      granted = Math.min(amount, Math.max(0, maximum - used));
+    if (!granted) return 0;
+    if (
+      await compareAndSet([
+        { key, expected: old, value: String(used + granted), ttl: 60 },
+      ])
+    )
+      return granted;
+  }
+  throw new GameError("Too many simultaneous actions. Please retry.", 409);
+}
+const rateReservations = new ReservationLimiter(reserveRateSlots);
+
 export async function rateLimit(
   identity: string,
   bucket: string,
   maximum: number,
 ): Promise<void> {
+  const mode = storageMode();
+  // Keep low-volume creation/join limits exact per request. Only the larger
+  // gameplay buckets reserve slots, and storage still enforces their global cap.
+  if (maximum >= 100 && process.env.RALLY_DISABLE_RATE_RESERVATIONS !== "true")
+    return rateReservations.take(identity, bucket, maximum);
   const key = `rally:rate:${identity}:${bucket}:${Math.floor(Date.now() / 60000)}`;
-  if (storageMode() === "redis") {
+  if (mode === "redis") {
     const count = await command<number>([
       "EVAL",
       "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n",

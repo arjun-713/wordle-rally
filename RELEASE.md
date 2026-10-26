@@ -34,6 +34,24 @@ The same benchmark verified cache invalidation after a guess and that cached sna
 - Sensitive-path probes for `.env.local`, `.git/config`, `.data/state.json`, and answer JSON files. API responses must exclude raw identity cookies, active answers, future answers, and opponents' guess words.
 - Automated accessibility and responsive checks, production compilation, and dependency audit.
 
+### Gameplay request optimization
+
+Gameplay limits now reserve four request slots at a time through an atomic Redis script. Each slot is booked against the same shared per-identity, per-bucket, per-minute counter before a warm function instance can use it. The global limits stay at 100 room actions and 120 solo/Daily actions per minute. Creation and joining keep their existing per-request limits. Reservations are serialized within an instance, isolated by identity/bucket/limit/window, bounded to 2,048 local entries, and discarded across minute boundaries. Transport failures grant no slots. An instance disappearing or evicting an entry can leave booked slots unused until the next minute; this makes limits conservative rather than permitting excess traffic. `RALLY_DISABLE_RATE_RESERVATIONS=true` restores per-request limiting for comparisons or rollback.
+
+Room, Unlimited and Daily routes reject malformed and unknown dictionary guesses before accessing Redis. The game engine still checks membership, match IDs, deadlines, repeated guesses, attempts, and scores using fresh state and atomic commits. The production-build benchmark verified zero Redis commands for invalid dictionary guesses across all three routes.
+
+Five-round games, with four accepted guesses per player per round, measured this additional reduction against the previous per-request limiter:
+
+| Players | Previous command executions | Reserved-slot command executions | Reduction |
+| ------- | --------------------------: | -------------------------------: | --------: |
+| 2       |                         275 |                              219 |    20.36% |
+| 4       |                         517 |                              409 |    20.89% |
+| 16      |                       1,969 |                            1,549 |    21.33% |
+
+Redis HTTP requests dropped by 24.09%, 24.51%, and 24.87% respectively. These are local production-build measurements with real Redis, serialized guesses, round advances, and completed statistics; setup and fixture inspection occur outside the measured interval. Concurrent transaction safety is tested separately. Cold instances, different guessing rates, cache misses, and other quota consumers affect hosted savings. The quiet-polling comparison remains in the same benchmark; this run crossed a ten-second snapshot boundary and needed two Redis reads per room rather than one.
+
+The updated suite passes 61 rule/service tests on both storage backends, including shared caps across independent limiter instances, partial reservations, concurrent requests, minute boundaries, failed allocations, eviction, and invalid-word validation. The Unlimited browser fixture waits for the acknowledged Next word response before inspecting the new puzzle, avoiding a race between its POST and a test-only GET.
+
 ## Production setup
 
 Vercel project: `wordle-rally`, linked to `arjun-713/wordle-rally`. Node 22.x and Mumbai functions are pinned. Publishing is manual via Vercel CLI; Git pushes do not automatically publish. Upstash `wordle-rally-redis` is connected to Production on the Free plan; Mumbai and eviction off were selected during setup. The application accepts the native `KV_REST_API_URL` / `KV_REST_API_TOKEN` credentials provisioned by that integration, as well as explicit `UPSTASH_REDIS_*` credentials. Credential pairs are never mixed and read-only tokens are not used for writes. Four configuration regressions verify those rules. The daily scheduling secret is configured in Vercel; no secrets are committed.

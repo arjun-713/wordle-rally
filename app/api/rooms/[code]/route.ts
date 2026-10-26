@@ -1,4 +1,5 @@
 import { body, identity, respond } from "@/lib/http";
+import { validateGuessInput } from "@/lib/guess-input";
 import { readRoom, invalidateRoom } from "@/lib/room-cache";
 import { roomAction } from "@/lib/service";
 import { rateLimit } from "@/lib/store";
@@ -22,8 +23,9 @@ export async function GET(request: Request, context: Context) {
 }
 export async function POST(request: Request, context: Context) {
   return respond(async () => {
-    const input = await body(request),
-      { code } = await context.params,
+    const input = await body(request);
+    validateGuessInput(input);
+    const { code } = await context.params,
       id = await identity();
     await rateLimit(
       id,

@@ -12,6 +12,7 @@ const redis = createClient({
 redis.on("error", () => {});
 await redis.connect();
 const token = "isolated-read-benchmark";
+let restCalls = 0;
 const bridge = createServer(async (request, response) => {
   response.setHeader("Content-Type", "application/json");
   if (request.headers.authorization !== `Bearer ${token}`) {
@@ -22,6 +23,7 @@ const bridge = createServer(async (request, response) => {
   try {
     let body = "";
     for await (const chunk of request) body += chunk;
+    restCalls++;
     response.end(
       JSON.stringify({
         result: await redis.sendCommand(JSON.parse(body).map(String)),
@@ -58,6 +60,7 @@ async function start(disabled) {
         UPSTASH_REDIS_REST_URL: `http://127.0.0.1:${bridge.address().port}`,
         UPSTASH_REDIS_REST_TOKEN: token,
         RALLY_DISABLE_ROOM_CACHE: disabled ? "true" : "false",
+        RALLY_DISABLE_RATE_RESERVATIONS: disabled ? "true" : "false",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
@@ -115,6 +118,7 @@ async function request(base, client, code, data, revision) {
   return result;
 }
 const rows = [],
+  mutations = [],
   servers = [];
 try {
   const baseline = await start(true),
@@ -220,6 +224,103 @@ try {
     rows.push(row);
     console.log(JSON.stringify(row));
   }
+  // The same legal gameplay workload on both servers. Requests are serialized
+  // to measure limiter savings without random CAS-contention retry overhead.
+  for (const count of [2, 4, 16]) {
+    const results = {};
+    for (const [label, server] of [
+      ["baseline", baseline],
+      ["optimized", optimized],
+    ]) {
+      const clients = Array.from({ length: count }, () => ({}));
+      const created = await request(server.base, clients[0], null, {
+        name: "Active Host",
+        config: {
+          mode: count === 4 ? "teams" : "free",
+          players: count,
+          rounds: 5,
+          seconds: 0,
+        },
+      });
+      for (let i = 1; i < count; i++)
+        await request(server.base, clients[i], created.code, {
+          action: "join",
+          name: `Active ${i}`,
+        });
+      const started = await request(server.base, clients[0], created.code, {
+        action: "start",
+      });
+      const fixture = JSON.parse(await redis.get(`rally:room:${created.code}`));
+      const before = await stats(),
+        httpBefore = restCalls;
+      let latest;
+      for (let round = 0; round < 5; round++) {
+        const answer = fixture.rounds[round].answer;
+        const words = ["crane", "spite", "sloth", "dream"]
+          .filter((w) => w !== answer)
+          .slice(0, 3)
+          .concat(answer);
+        for (const client of clients) {
+          for (const word of words)
+            latest = await request(server.base, client, created.code, {
+              action: "guess",
+              round,
+              matchId: started.matchId,
+              word,
+            });
+        }
+        if (round < 4)
+          latest = await request(server.base, clients[0], created.code, {
+            action: "next",
+            round,
+            matchId: started.matchId,
+          });
+      }
+      assert.equal(latest.status, "finished");
+      assert.ok(latest.players.every((p) => p.score === 5));
+      results[label] = {
+        commands: charged(delta(before, await stats())),
+        restRequests: restCalls - httpBefore,
+      };
+    }
+    assert.ok(results.optimized.commands < results.baseline.commands);
+    assert.ok(results.optimized.restRequests < results.baseline.restRequests);
+    const row = {
+      players: count,
+      rounds: 5,
+      guessesPerPlayerPerRound: 4,
+      ...results,
+      commandReductionPercent:
+        Math.round(
+          10000 * (1 - results.optimized.commands / results.baseline.commands),
+        ) / 100,
+      requestReductionPercent:
+        Math.round(
+          10000 *
+            (1 -
+              results.optimized.restRequests / results.baseline.restRequests),
+        ) / 100,
+    };
+    mutations.push(row);
+    console.log(JSON.stringify(row));
+  }
+  const beforeInvalid = await stats(),
+    invalidHttpBefore = restCalls;
+  for (const path of ["/api/rooms/AAAAAA", "/api/solo", "/api/daily"]) {
+    const response = await fetch(optimized.base + path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "guess", word: "zzzzz" }),
+    });
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /dictionary/);
+  }
+  const invalidGuessCommands = charged(delta(beforeInvalid, await stats()));
+  assert.equal(invalidGuessCommands, 0);
+  assert.equal(restCalls - invalidHttpBefore, 0);
+  console.log(
+    JSON.stringify({ invalidGuesses: 3, redisCommands: 0, restRequests: 0 }),
+  );
   await mkdir(".impeccable/review", { recursive: true });
   await writeFile(
     ".impeccable/review/read-benchmark.json",
@@ -228,6 +329,8 @@ try {
         workload:
           "5 polls per player, one second apart; identical requests with server snapshot cache disabled/enabled",
         rows,
+        mutations,
+        invalidGuessCommands,
       },
       null,
       2,
