@@ -50,7 +50,7 @@ Five-round games, with four accepted guesses per player per round, measured this
 
 Redis HTTP requests dropped by 24.09%, 24.51%, and 24.87% respectively. These are local production-build measurements with real Redis, serialized guesses, round advances, and completed statistics; setup and fixture inspection occur outside the measured interval. Concurrent transaction safety is tested separately. Cold instances, different guessing rates, cache misses, and other quota consumers affect hosted savings. The quiet-polling comparison remains in the same benchmark; this run crossed a ten-second snapshot boundary and needed two Redis reads per room rather than one.
 
-The updated suite passes 61 rule/service tests on both storage backends, including shared caps across independent limiter instances, partial reservations, concurrent requests, minute boundaries, failed allocations, eviction, and invalid-word validation. The Unlimited browser fixture waits for the acknowledged Next word response before inspecting the new puzzle, avoiding a race between its POST and a test-only GET.
+The updated suite passes 62 rule/service tests on both storage backends, including shared caps across independent limiter instances, partial reservations, concurrent requests, minute boundaries, failed allocations, eviction, cache pressure, and invalid-word validation. A full cache never evicts pending reservations: overflow requests book one slot directly, while callers waking from completed reservations can still spend their already-booked slots even if the cache subsequently evicts that entry. The Unlimited browser fixture waits for the acknowledged Next word response before inspecting the new puzzle, avoiding a race between its POST and a test-only GET.
 
 ## Production setup
 

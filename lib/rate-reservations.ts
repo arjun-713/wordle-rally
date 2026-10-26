@@ -26,6 +26,13 @@ export class ReservationLimiter {
     private capacity = 2048,
   ) {}
 
+  private async allocate(key: string, amount: number, maximum: number) {
+    const granted = await this.reserve(key, amount, maximum);
+    if (!Number.isInteger(granted) || granted < 0 || granted > amount)
+      throw new GameError("Request limiter is unavailable. Please retry.", 503);
+    return granted;
+  }
+
   async take(identity: string, bucket: string, maximum: number) {
     for (;;) {
       const minute = Math.floor(this.clock() / 60000),
@@ -42,21 +49,28 @@ export class ReservationLimiter {
         if (this.allowances.size >= this.capacity) {
           for (const [k, entry] of this.allowances)
             if (entry.expires <= this.clock()) this.allowances.delete(k);
-          if (this.allowances.size >= this.capacity)
-            this.allowances.delete(this.allowances.keys().next().value!);
+          if (this.allowances.size >= this.capacity) {
+            const disposable = [...this.allowances].find(
+              ([, entry]) => !entry.pending,
+            );
+            if (disposable) this.allowances.delete(disposable[0]);
+            else {
+              // Never evict work another request is awaiting. Under pressure,
+              // book just this request directly instead of churning leases.
+              const granted = await this.allocate(key, 1, maximum);
+              if (Math.floor(this.clock() / 60000) !== minute) continue;
+              if (!granted) throw limited();
+              return;
+            }
+          }
         }
         allowance = { remaining: 0, expires, denied: false };
         this.allowances.set(localKey, allowance);
       }
       if (!allowance.pending) {
         const entry = allowance;
-        entry.pending = this.reserve(key, 4, maximum)
+        entry.pending = this.allocate(key, 4, maximum)
           .then((granted) => {
-            if (!Number.isInteger(granted) || granted < 0 || granted > 4)
-              throw new GameError(
-                "Request limiter is unavailable. Please retry.",
-                503,
-              );
             entry.remaining = granted;
             entry.denied = granted === 0;
           })
@@ -67,6 +81,14 @@ export class ReservationLimiter {
       await allowance.pending;
       // Recompute the window after I/O. Slots booked just before midnight's
       // minute boundary must never be spent in the following minute.
+      if (Math.floor(this.clock() / 60000) !== minute) continue;
+      // The cache may have evicted this completed entry while it was waking
+      // its callers. Its already-booked slots still belong to those callers.
+      if (allowance.remaining) {
+        allowance.remaining--;
+        return;
+      }
+      if (allowance.denied) throw limited();
     }
   }
 }

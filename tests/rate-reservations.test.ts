@@ -124,6 +124,17 @@ test("identities, buckets and limits have separate local allowances; eviction on
     (error: unknown) => error instanceof GameError && error.status === 429,
   );
 });
+test("a full local cache does not evict pending reservations or churn under concurrent identities", async () => {
+  const db = backend(),
+    limiter = new ReservationLimiter(db.reserve, () => 0, 1);
+  await Promise.all([
+    limiter.take("first", "actions", 100),
+    limiter.take("second", "actions", 100),
+  ]);
+  assert.equal(db.calls(), 2);
+  assert.equal(db.booked.get("rally:rate:first:actions:0"), 4);
+  assert.equal(db.booked.get("rally:rate:second:actions:0"), 1);
+});
 test("the actual storage limiter allows exactly its configured number of concurrent requests", async (t) => {
   // Real Redis exercises the Lua allocator; local storage exercises its CAS fallback.
   const now = Date.now();
