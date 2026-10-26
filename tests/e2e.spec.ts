@@ -283,11 +283,9 @@ test("a lost sixth-guess response recovers the saved loss once; an unsaved reque
   await expect(page.locator(".game-status")).toHaveText("Solved in 1/6");
 });
 
-test("Daily loss resumes without another attempt; results share a spoiler-free grid and stats remain separate", async ({
+test("Daily loss resumes without another attempt and stats remain separate", async ({
   page,
-  context,
 }) => {
-  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
   await page.goto("/daily");
   await expect(
     page.getByRole("heading", { name: "Daily challenge" }),
@@ -299,10 +297,6 @@ test("Daily loss resumes without another attempt; results share a spoiler-free g
   for (const word of wrongWords(answer)) await guess(page, word);
   await expect(page.locator(".game-status")).toHaveText("Out of guesses");
   await expect(page.getByText(/Next daily in/)).toBeVisible();
-  await page.getByRole("button", { name: "Copy result" }).click();
-  const copied = await page.evaluate(() => navigator.clipboard.readText());
-  expect(copied).toContain("X/6");
-  expect(copied.toLowerCase()).not.toContain(answer);
   await page.reload();
   await expect(page.locator(".game-status")).toHaveText("Out of guesses");
   await expect(page.getByRole("button", { name: "Next word" })).toHaveCount(0);

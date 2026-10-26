@@ -1,13 +1,7 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  CircleHelp,
-  Copy,
-  LoaderCircle,
-  Shuffle,
-} from "lucide-react";
+import { ArrowRight, CircleHelp, LoaderCircle, Shuffle } from "lucide-react";
 import type { Difficulty, PublicSoloGame } from "@/lib/types";
 import { isGuessRejection } from "@/lib/client-api";
 import { api, Modal, Rules } from "./shared";
@@ -17,7 +11,6 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
   const endpoint = daily ? "/api/daily" : "/api/solo";
   const [level, setLevel] = useState<Difficulty>("mixed");
   const [clock, setClock] = useState(Date.now());
-  const [shared, setShared] = useState(false);
   const currentId = useRef("");
   const [game, setGame] = useState<PublicSoloGame | null>(null);
   const [error, setError] = useState("");
@@ -68,7 +61,6 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
   }, [apply, endpoint]);
   useEffect(() => {
     if (game?.difficulty) setLevel(game.difficulty);
-    setShared(false);
   }, [game?.id]);
   useEffect(() => {
     if (!daily) return;
@@ -88,20 +80,6 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
       void refresh();
     }
   }, [clock, daily, game?.date, refresh]);
-  async function share() {
-    if (!game) return;
-    const squares = { correct: "🟩", present: "🟨", absent: "⬜" }; // taste-skill-ignore: standard spoiler-free Wordle share text, never rendered as UI.
-    const text = `Wordrally ${daily ? `Daily #${game.number} · ${game.date}` : "Unlimited"}\n${game.status === "won" ? game.guesses.length : "X"}/6\n${game.guesses.map((g) => g.marks.map((m) => squares[m]).join("")).join("\n")}`;
-    try {
-      await navigator.clipboard.writeText(text);
-      setShared(true);
-      setTimeout(() => setShared(false), 2500);
-    } catch {
-      setError(
-        "Clipboard unavailable. You can share a screenshot of your board.",
-      );
-    }
-  }
   async function action(input: Record<string, unknown>) {
     if (sending.current) return false;
     sending.current = true;
@@ -263,13 +241,6 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
                       <ArrowRight size={18} />
                     </Link>
                   )}
-                  <button
-                    className="button secondary"
-                    onClick={() => void share()}
-                  >
-                    <Copy size={17} />
-                    {shared ? "Copied" : "Copy result"}
-                  </button>
                 </div>
                 {daily && game.resetsAt && (
                   <p className="result-detail">

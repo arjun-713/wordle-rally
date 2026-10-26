@@ -40,7 +40,7 @@ The product is branded Wordrally. Initial capacity limit is 16 players per room;
 - Familiar, Challenging, and Random mix pools combine frequency-ranked vocabulary and the filtered Wordle list; the accepted guess dictionary is unchanged. Unlimited difficulty changes apply to the next puzzle.
 - Championships use 2–10 matches in the same room with fixed teams after the first match. Cumulative points decide the title; ties are shared. Each match retains its round breakdown.
 - Post-match breakdowns show each player’s solve status, guesses used, solve time, and points for every round.
-- The daily challenge at `/daily` is one shared UTC puzzle per day, with saved progress, one six-guess attempt, consecutive-day streaks, and spoiler-free result copying.
+- The daily challenge at `/daily` is one shared UTC puzzle per day, with saved progress, one six-guess attempt, consecutive-day streaks.
 - Daily words are reserved from new random games. The checked-in non-repeating calendar starts October 25, 2026 and must be extended before its 366 assigned words run out; it never wraps. Legacy identities that already saw today’s word are offered Unlimited instead of a repeat.
 - Personal statistics at `/stats` show completed puzzle counts, solve rate, streaks, average guesses on wins, six-bin guess distributions, multiplayer points, and match results. Statistics live on the dedicated stats screen; active games have no metrics rail.
 - Sound and haptics are optional, off by default, and saved in the browser. Haptics depend on browser/device support. Motion follows reduced-motion settings and acknowledged guesses do not replay reveals on reload.

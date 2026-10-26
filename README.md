@@ -19,5 +19,5 @@ Play at **[wordle-rally.vercel.app](https://wordle-rally.vercel.app)**.
 | **2 vs 2**           | Four players compete in two teams. Each player has their own board; teammates’ points add to the team total.                                                    |
 | **1 vs all**         | A free-for-all for 2–16 players. Everyone competes for their own score.                                                                                         |
 | **Championship**     | The same players or teams play several matches, with points carried into tournament standings. The host advances between matches; tied leaders share the title. |
-| **Daily challenge**  | Play the day’s puzzle, save your progress, and share your result without revealing the word.                                                                    |
+| **Daily challenge**  | Play one shared puzzle per day, with six guesses and saved progress.                                                                                            |
 | **Wordle Unlimited** | Play solo at your own pace and start another puzzle whenever you finish.                                                                                        |

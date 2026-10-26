@@ -304,18 +304,6 @@ export default function RoomClient({ code }: { code: string }) {
     room && solved
       ? pointsForGuess(room.config, current?.guesses.length ?? 0)
       : 0;
-  async function copyResult() {
-    if (!room || !current) return;
-    try {
-      const squares = { correct: "🟩", present: "🟨", absent: "⬜" }; // taste-skill-ignore: standard spoiler-free Wordle share text, never rendered as UI.
-      await navigator.clipboard.writeText(
-        `Wordrally · ${MODES[room.config.mode].label} · Round ${room.round + 1}/${room.config.rounds} · ${solved ? current.guesses.length : "X"}/6\n${current.guesses.map((guess) => guess.marks.map((mark) => squares[mark]).join("")).join("\n")}`,
-      );
-      setCopied("result");
-    } catch {
-      setError("Could not copy the result. Please try again.");
-    }
-  }
   return (
     <div
       className={`app-shell ${room?.status !== "lobby" && room ? "play-shell" : "room-shell"}`}
@@ -767,13 +755,6 @@ export default function RoomClient({ code }: { code: string }) {
                           Waiting for the host.
                         </span>
                       )}
-                      <button
-                        className="button secondary"
-                        onClick={() => void copyResult()}
-                      >
-                        <Copy size={17} />
-                        {copied === "result" ? "Copied" : "Copy result"}
-                      </button>
                     </div>
                   </section>
                 )}
