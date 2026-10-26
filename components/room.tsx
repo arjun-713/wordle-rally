@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { roomPollDelay } from "@/lib/room-polling";
+import { isGuessRejection } from "@/lib/client-api";
 import type { Player, PublicRoom, RoomSyncReply } from "@/lib/types";
 import { MODES } from "@/lib/types";
 import Link from "next/link";
@@ -205,6 +206,7 @@ export default function RoomClient({ code }: { code: string }) {
       apply(next);
       return next;
     } catch (e) {
+      if (data.action === "guess" && isGuessRejection(e)) throw e;
       setError((e as Error).message);
     } finally {
       busyRef.current = false;

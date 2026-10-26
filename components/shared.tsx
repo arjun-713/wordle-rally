@@ -2,6 +2,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { ArrowUpRight, X } from "lucide-react";
 import Link from "next/link";
+export { api } from "@/lib/client-api";
 export function Logo() {
   return (
     <Link href="/" className="logo" aria-label="Word Rally home">
@@ -110,30 +111,6 @@ export function Footer() {
       <span>Made for a little friendly rivalry.</span>
     </footer>
   );
-}
-export async function api<T>(
-  url: string,
-  data?: unknown,
-  signal?: AbortSignal,
-): Promise<T> {
-  const response = await fetch(url, {
-    method: data ? "POST" : "GET",
-    ...(data
-      ? {
-          body: JSON.stringify(data),
-          headers: { "Content-Type": "application/json" },
-        }
-      : {}),
-    cache: "no-store",
-    signal,
-  });
-  const json = await response.json();
-  if (!response.ok)
-    throw Object.assign(
-      new Error(json.error ?? "Something went wrong. Please try again."),
-      { status: response.status },
-    );
-  return json;
 }
 export function savedName() {
   try {

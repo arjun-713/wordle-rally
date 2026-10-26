@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Delete } from "lucide-react";
+import { useEffect, useId, useRef, useState } from "react";
+import { ArrowRight, Delete, LoaderCircle } from "lucide-react";
+import { isGuessRejection } from "@/lib/client-api";
 import { feedback, unlockFeedback } from "./preferences";
 import type { Guess, Mark } from "@/lib/types";
 
@@ -14,12 +15,19 @@ type Props = {
 export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
   const [input, setInput] = useState("");
   const initialCount = useRef(guesses.length);
-  const [shake, setShake] = useState(false);
+  const [rejection, setRejection] = useState("");
+  const [rejectionSequence, setRejectionSequence] = useState(0);
+  const feedbackId = useId();
+  const activeRow = useRef<HTMLDivElement>(null);
+  const wiggle = useRef<Animation | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const sending = useRef(false);
   useEffect(() => {
     setInput("");
+    setRejection("");
+    wiggle.current?.cancel();
   }, [guesses.length]);
+  useEffect(() => () => wiggle.current?.cancel(), []);
   const previousCount = useRef(guesses.length);
   useEffect(() => {
     if (guesses.length > previousCount.current)
@@ -29,14 +37,31 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
     previousCount.current = guesses.length;
   }, [guesses]);
   const setError = onError;
+  function reject(message = "") {
+    feedback("error");
+    setRejection(message);
+    setRejectionSequence((n) => n + 1);
+    wiggle.current?.cancel();
+    if (
+      !window.matchMedia("(prefers-reduced-motion: reduce)").matches &&
+      activeRow.current?.animate
+    )
+      wiggle.current = activeRow.current.animate(
+        [0, -6, 6, -5, 5, -2, 2, 0].map((x) => ({
+          transform: `translateX(${x}px)`,
+        })),
+        { duration: 350, easing: "ease-out" },
+      );
+  }
+  function clearRejection() {
+    setRejection("");
+    wiggle.current?.cancel();
+  }
   async function submit() {
     if (!playable || busy || sending.current) return;
     unlockFeedback();
     if (input.length !== 5) {
-      feedback("error");
-      setError("Enter a five-letter word.");
-      setShake(true);
-      setTimeout(() => setShake(false), 400);
+      reject("Enter a five-letter word.");
       return;
     }
     sending.current = true;
@@ -44,19 +69,30 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
       if (await onGuess(input.toLowerCase())) {
         setInput("");
       } else {
-        feedback("error");
-        setShake(true);
-        setTimeout(() => setShake(false), 400);
+        reject();
+      }
+    } catch (error) {
+      if (isGuessRejection(error)) reject(error.message);
+      else {
+        setError(
+          error instanceof Error
+            ? error.message
+            : "Could not check your guess. Please retry.",
+        );
+        reject();
       }
     } finally {
       sending.current = false;
     }
     if (window.matchMedia("(min-width: 601px)").matches)
-      inputRef.current?.focus();
+      requestAnimationFrame(() => {
+        if (!document.querySelector("dialog[open]")) inputRef.current?.focus();
+      });
   }
   function keypress(key: string) {
     if (!playable || busy || sending.current) return;
     setError("");
+    clearRejection();
     if (key === "ENTER") {
       void submit();
       return;
@@ -99,7 +135,7 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
   return (
     <>
       <div
-        className={`word-board ${shake ? "shake" : ""}`}
+        className="word-board"
         role="table"
         aria-label="Your word board"
         onClick={() =>
@@ -113,7 +149,8 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
           const active = r === (guesses.length ?? 0) && playable;
           return (
             <div
-              className={`tile-row ${r >= initialCount.current && guess?.marks.every((m) => m === "correct") ? "winning-row" : ""}`}
+              className={`tile-row ${active && rejection ? "rejected-row" : ""} ${r >= initialCount.current && guess?.marks.every((m) => m === "correct") ? "winning-row" : ""}`}
+              ref={active ? activeRow : undefined}
               role="row"
               key={r}
               aria-label={`Guess ${r + 1}${guess ? `: ${guess.word.toUpperCase()}` : active ? ": current guess" : ": empty"}`}
@@ -141,6 +178,15 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
           );
         })}
       </div>
+      <span
+        id={feedbackId}
+        className="sr-only guess-feedback"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <span key={rejectionSequence}>{rejection}</span>
+      </span>
       {playable && (
         <form
           className="mobile-word-entry"
@@ -156,6 +202,9 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
             id="word-input"
             ref={inputRef}
             value={input}
+            disabled={busy}
+            aria-invalid={!!rejection}
+            aria-describedby={rejection ? feedbackId : undefined}
             onChange={(e) => {
               setInput(
                 e.target.value
@@ -164,6 +213,7 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
                   .slice(0, 5),
               );
               setError("");
+              clearRejection();
             }}
             autoCapitalize="characters"
             autoComplete="off"
@@ -174,7 +224,11 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
             placeholder="Type a word or use the keys below"
           />
           <button type="submit" disabled={busy} aria-label="Submit guess">
-            <ArrowRight size={18} />
+            {busy ? (
+              <LoaderCircle size={18} className="spinner" />
+            ) : (
+              <ArrowRight size={18} />
+            )}
           </button>
         </form>
       )}

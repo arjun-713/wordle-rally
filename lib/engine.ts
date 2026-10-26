@@ -6,6 +6,7 @@ export class GameError extends Error {
   constructor(
     message: string,
     public status = 400,
+    public code?: string,
   ) {
     super(message);
   }
@@ -14,8 +15,9 @@ export function requireGame(
   condition: unknown,
   message: string,
   status = 400,
+  code?: string,
 ): asserts condition {
-  if (!condition) throw new GameError(message, status);
+  if (!condition) throw new GameError(message, status, code);
 }
 export function validateConfig(input: unknown): Config {
   const c = input as Config | undefined;
@@ -196,10 +198,14 @@ export function evaluateGuess(
   requireGame(
     /^[a-z]{5}$/.test(word) && valid.has(word),
     "That word is not in the dictionary. Try another five-letter word.",
+    400,
+    "INVALID_GUESS",
   );
   requireGame(
     !guesses.some((g) => g.word === word),
     "You already tried that word.",
+    400,
+    "INVALID_GUESS",
   );
   return { word, marks: markGuess(word, answer) };
 }

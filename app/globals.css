@@ -22,6 +22,7 @@
   --gold: #957121;
   --yellow: #f8edca;
   --stone: #6b746d;
+  --error-ink: #874226;
   --radius: 12px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -1852,18 +1853,8 @@ legend {
   font-size: 10px;
   color: var(--green);
 }
-.shake {
-  animation: shake 0.35s ease;
-}
-@keyframes shake {
-  20%,
-  60% {
-    transform: translateX(-5px);
-  }
-  40%,
-  80% {
-    transform: translateX(5px);
-  }
+.tile-row.rejected-row .tile {
+  border-color: var(--error-ink);
 }
 .sr-only {
   position: absolute;

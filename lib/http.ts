@@ -96,6 +96,9 @@ export async function respond(work: () => Promise<unknown>) {
       );
     return NextResponse.json(
       {
+        ...(error instanceof GameError && error.code
+          ? { code: error.code }
+          : {}),
         error:
           error instanceof GameError
             ? error.message

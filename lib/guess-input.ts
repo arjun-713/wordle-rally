@@ -10,9 +10,13 @@ export function validateGuessInput(input: Record<string, unknown>) {
   requireGame(
     typeof input.word === "string" && /^[a-z]{5}$/i.test(input.word),
     "Enter a five-letter word.",
+    400,
+    "INVALID_GUESS",
   );
   requireGame(
     valid.has(input.word.toLowerCase()),
     "That word is not in our dictionary.",
+    400,
+    "INVALID_GUESS",
   );
 }

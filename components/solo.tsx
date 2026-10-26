@@ -17,6 +17,7 @@ import { PreferencesButton } from "./preferences";
 import type { StatsBook, Difficulty, PublicSoloGame } from "@/lib/types";
 import { api, Logo, Modal } from "./shared";
 import { WordPlay } from "./word-play";
+import { isGuessRejection } from "@/lib/client-api";
 
 export default function SoloClient({ daily = false }: { daily?: boolean }) {
   const endpoint = daily ? "/api/daily" : "/api/solo";
@@ -29,6 +30,8 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [pendingGuess, setPendingGuess] = useState(false);
+  const [checkingSaved, setCheckingSaved] = useState(false);
   const [help, setHelp] = useState(false);
   const sending = useRef(false);
   const latest = useRef(-1);
@@ -115,6 +118,7 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
     if (sending.current) return false;
     sending.current = true;
     setBusy(true);
+    setPendingGuess(input.action === "guess");
     setError("");
     try {
       apply(
@@ -126,19 +130,37 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
       );
       return true;
     } catch (e) {
-      setError((e as Error).message);
-      if ((e as Error & { status?: number }).status === 409) {
+      if (input.action === "guess" && isGuessRejection(e)) throw e;
+      if (
+        input.action === "guess" ||
+        (e as Error & { status?: number }).status === 409
+      ) {
+        setCheckingSaved(true);
         try {
           const current = await api<PublicSoloGame | null>(endpoint);
-          if (current) apply(current);
+          if (current) {
+            apply(current);
+            if (
+              input.action === "guess" &&
+              current.id === game?.id &&
+              current.guesses.length > game.guesses.length &&
+              current.guesses.some((guess) => guess.word === input.word)
+            ) {
+              setError("");
+              return true;
+            }
+          }
         } catch {
           /* Keep the recoverable error and existing puzzle. */
         }
       }
+      setError((e as Error).message);
       return false;
     } finally {
       sending.current = false;
       setBusy(false);
+      setPendingGuess(false);
+      setCheckingSaved(false);
     }
   }
   const finished = game && game.status !== "playing";
@@ -236,11 +258,15 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
                     aria-live="polite"
                   >
                     <strong>
-                      {game.status === "won"
-                        ? "That’s the word. Nice one!"
-                        : game.status === "lost"
-                          ? "A tricky one. Try another?"
-                          : "Just you and five letters."}
+                      {pendingGuess
+                        ? checkingSaved
+                          ? "Checking your saved result…"
+                          : "Checking your guess…"
+                        : game.status === "won"
+                          ? "That’s the word. Nice one!"
+                          : game.status === "lost"
+                            ? "A tricky one. Try another?"
+                            : "Just you and five letters."}
                     </strong>
                     <span>
                       {finished ? (

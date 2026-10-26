@@ -276,6 +276,8 @@ The wordmark combines small tilted letter pieces with rounded lettering. Navigat
 
 The board is a precise five-column, six-attempt matrix. Empty cells are white and outlined; typed cells strengthen their outline. Acknowledged cells use the shared feedback colors with white, heavy letters. The single reveal lasts (320ms), staggered (55ms) per cell. Text descriptions expose letter state to assistive technology.
 
+Rejected guesses wiggle only the active row for (350ms), retaining the typed word and marking its outlines with `error-ink` until editing resumes. Dictionary and duplicate-word rejections use this board feedback with a screen-reader announcement rather than a separate alert panel. Reduced motion retains the outline and announcement without movement. A pending guess announces that it is being checked; lost replies trigger a bounded check of the saved puzzle before a retry is offered.
+
 The three-row keyboard uses pale keys, equal flexible letters, and wider Enter/Delete controls. Keys are (46px) high; feedback colors follow the board. Preserve the visible text legend and status announcements. Supporting standings highlight the current player with mint and pair numbers with names and textual solve status.
 
 The illustrative board entrance lasts (700ms) with the shared easing curve. Reduced-motion preferences remove CSS animations and transitions and remove the main action's press transform. These motion details are recorded in the sidecar rather than frontmatter.

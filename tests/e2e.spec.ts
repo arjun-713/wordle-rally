@@ -75,9 +75,7 @@ test("Wordle Unlimited saves progress, accepts touch guesses, tracks streaks, an
   ).toBeVisible();
   await page.getByLabel("Type your five-letter guess").fill("zzzzz");
   await page.getByRole("button", { name: "Submit guess", exact: true }).click();
-  await expect(page.locator('.room-error[role="alert"]')).toContainText(
-    "dictionary",
-  );
+  await expect(page.locator(".guess-feedback")).toContainText("dictionary");
   expect(
     (await (await page.request.get("/api/solo")).json()).guesses,
   ).toHaveLength(1);
@@ -237,6 +235,180 @@ async function secret(code: string): Promise<Room> {
   const state = JSON.parse(await readFile(".data/e2e/state.json", "utf8"));
   return JSON.parse(state[`rally:room:${code}`].value);
 }
+
+async function prepareFinalSoloGuess(page: Page) {
+  const game: PublicSoloGame = await (
+    await page.request.post("/api/solo", {
+      data: { action: "start" },
+    })
+  ).json();
+  const fixture = await soloSecret(game.id);
+  const wrong = [
+    "ouija",
+    "ample",
+    "racer",
+    "races",
+    "raves",
+    "rates",
+    "sloth",
+  ].filter((word) => word !== fixture.answer);
+  for (const word of wrong.slice(0, 5)) {
+    const response = await page.request.post("/api/solo", {
+      data: { action: "guess", gameId: game.id, word },
+    });
+    expect(response.ok()).toBe(true);
+  }
+  await page.goto("/unlimited");
+  await expect(page.getByText("5 / 6 guesses", { exact: true })).toBeVisible();
+  return { game, answer: fixture.answer, wrong: wrong[5] };
+}
+
+test("Unlimited recovers the saved loss when the sixth-guess response stalls", async ({
+  page,
+}) => {
+  const fixture = await prepareFinalSoloGuess(page);
+  let committed!: () => void, release!: () => void;
+  const saved = new Promise<void>((resolve) => {
+    committed = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let guessPosts = 0;
+  await page.route("**/api/solo", async (route) => {
+    if (
+      route.request().method() === "POST" &&
+      route.request().postDataJSON()?.action === "guess"
+    ) {
+      guessPosts++;
+      const response = await route.fetch();
+      committed();
+      await held;
+      await route.fulfill({ response }).catch(() => {});
+    } else await route.continue();
+  });
+  try {
+    await page.clock.install();
+    await page.getByLabel("Type your five-letter guess").fill(fixture.wrong);
+    await page
+      .getByRole("button", { name: "Submit guess", exact: true })
+      .click();
+    await saved;
+    await expect(
+      page.getByRole("button", { name: "Submit guess", exact: true }),
+    ).toBeDisabled();
+    await expect(
+      page.getByText("Checking your guess…", { exact: true }),
+    ).toBeVisible();
+    await capture(page, "sixth-pending-mobile", 390, 844);
+    await page.clock.fastForward(12001);
+    await expect(
+      page.getByText("A tricky one. Try another?", { exact: true }),
+    ).toBeVisible();
+    await expect(page.locator(".solo-answer")).toHaveText(
+      fixture.answer.toUpperCase(),
+    );
+    await expect(
+      page.getByRole("button", { name: "Next word", exact: true }),
+    ).toBeEnabled();
+    expect(guessPosts).toBe(1);
+    const game: PublicSoloGame = await (
+      await page.request.get("/api/solo")
+    ).json();
+    expect(game.guesses).toHaveLength(6);
+    expect(game.status).toBe("lost");
+    expect(game.stats.played).toBe(1);
+    await capture(page, "sixth-lost-desktop", 1440, 1050);
+  } finally {
+    release();
+  }
+});
+
+test("dictionary rejection wiggles only the current row and keeps the word editable", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/unlimited");
+  const input = page.getByLabel("Type your five-letter guess");
+  await expect(input).toBeVisible();
+  await input.fill("ZZZZZ");
+  await input.press("Enter");
+  const rejected = page.locator(".tile-row.rejected-row");
+  await expect(rejected).toHaveCount(1);
+  expect(await rejected.evaluate((row) => row.getAnimations().length)).toBe(1);
+  expect(
+    await page
+      .locator(".word-board")
+      .evaluate((board) => board.getAnimations().length),
+  ).toBe(0);
+  await expect(rejected).toHaveText("ZZZZZ");
+  await expect(rejected.locator(".tile").first()).toHaveCSS(
+    "border-top-color",
+    "rgb(135, 66, 38)",
+  );
+  await expect(page.locator('.room-error[role="alert"]')).toHaveCount(0);
+  await expect(input).toHaveValue("ZZZZZ");
+  await expect(input).toBeEnabled();
+  await expect(input).toBeFocused();
+  await expect(page.getByText("0 / 6 guesses", { exact: true })).toBeVisible();
+  await capture(page, "dictionary-rejected-desktop");
+  await capture(page, "dictionary-rejected-wide", 1920, 1080);
+  await capture(page, "dictionary-rejected-mobile", 390, 844);
+  await page.setViewportSize({ width: 1440, height: 1050 });
+  await input.fill("CRANE");
+  await expect(rejected).toHaveCount(0);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await input.fill("ZZZZZ");
+  await input.press("Enter");
+  await expect(page.locator(".tile-row.rejected-row")).toHaveCount(1);
+  expect(
+    await page
+      .locator(".word-board")
+      .evaluate((el) => el.getAnimations({ subtree: true }).length),
+  ).toBe(0);
+});
+test("a correct sixth guess wins and opens the next Unlimited puzzle", async ({
+  page,
+}) => {
+  const fixture = await prepareFinalSoloGuess(page);
+  await page.getByLabel("Type your five-letter guess").fill(fixture.answer);
+  await page.getByRole("button", { name: "Submit guess", exact: true }).click();
+  await expect(
+    page.getByText("That’s the word. Nice one!", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("6 / 6 guesses", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Next word", exact: true }).click();
+  await expect(page.getByLabel("Type your five-letter guess")).toBeEnabled();
+  await expect(page.getByText("0 / 6 guesses", { exact: true })).toBeVisible();
+});
+test("an unsaved final guess stays editable after a network failure and can be retried once", async ({
+  page,
+}) => {
+  const fixture = await prepareFinalSoloGuess(page);
+  const unavailable = async (route: import("@playwright/test").Route) => {
+    await route.abort("internetdisconnected");
+  };
+  await page.route("**/api/solo", unavailable);
+  const input = page.getByLabel("Type your five-letter guess");
+  await input.fill(fixture.wrong);
+  await page.getByRole("button", { name: "Submit guess", exact: true }).click();
+  await expect(page.locator('.room-error[role="alert"]')).toContainText(
+    "connection",
+  );
+  await expect(input).toBeEnabled();
+  await expect(input).toHaveValue(fixture.wrong.toUpperCase());
+  await expect(page.getByText("5 / 6 guesses", { exact: true })).toBeVisible();
+  await page.unroute("**/api/solo", unavailable);
+  await page.getByRole("button", { name: "Submit guess", exact: true }).click();
+  await expect(
+    page.getByText("A tricky one. Try another?", { exact: true }),
+  ).toBeVisible();
+  const game: PublicSoloGame = await (
+    await page.request.get("/api/solo")
+  ).json();
+  expect(game.guesses).toHaveLength(6);
+  expect(game.stats.played).toBe(1);
+});
 test("friends create, join, play two rounds, see results, and set up a fresh rematch", async ({
   browser,
   page,
