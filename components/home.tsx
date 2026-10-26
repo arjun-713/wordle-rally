@@ -1,76 +1,55 @@
 "use client";
 import { useEffect, useState } from "react";
-import {
-  ArrowRight,
-  Check,
-  ChevronRight,
-  CircleHelp,
-  Clock3,
-  Copy,
-  Flag,
-  Hash,
-  MoveUpRight,
-  Plus,
-  Swords,
-  Trophy,
-  UserRound,
-  Users,
-  Zap,
-  Asterisk,
-  Infinity as InfinityIcon,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight, CircleHelp, Hash, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { MODES, type Config, type Mode, type PublicRoom } from "@/lib/types";
-import { PreferencesButton } from "./preferences";
-import { api, Footer, Logo, Modal, Rules, savedName, saveName } from "./shared";
+import { api, Modal, Rules, savedName, saveName } from "./shared";
+import { TopNav } from "./navigation";
 
-const previewRows = [
-  { word: "CRANE", marks: ["absent", "absent", "absent", "absent", "correct"] },
+const preview = [
   {
-    word: "SPITE",
-    marks: ["correct", "absent", "correct", "absent", "correct"],
+    word: "PLAYS",
+    marks: ["absent", "present", "present", "present", "absent"],
   },
   {
-    word: "SMILE",
+    word: "PARTY",
+    marks: ["absent", "correct", "present", "absent", "correct"],
+  },
+  {
+    word: "RALLY",
     marks: ["correct", "correct", "correct", "correct", "correct"],
   },
 ];
 export default function Home() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("free");
-  const [panel, setPanel] = useState<
-    "create" | "join" | "rules" | "name" | null
-  >(null);
+  const [mode, setMode] = useState<Mode>("duel");
+  const [panel, setPanel] = useState<"create" | "join" | "rules" | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [players, setPlayers] = useState(4);
-  const [rounds, setRounds] = useState(5);
-  const [seconds, setSeconds] = useState(90);
+  const [players, setPlayers] = useState(4),
+    [rounds, setRounds] = useState(5),
+    [seconds, setSeconds] = useState(90);
   const [scoring, setScoring] = useState<"classic" | "bonus">("classic");
   const [difficulty, setDifficulty] = useState<
     "familiar" | "challenging" | "mixed"
   >("mixed");
-  const [matches, setMatches] = useState(1);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [matches, setMatches] = useState(1),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
   useEffect(() => {
     setName(savedName());
   }, []);
-  const open = (next: typeof panel) => {
+  function open(next: typeof panel) {
     setError("");
     setPanel(next);
-  };
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  }
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
     setError("");
     if (!name.trim()) {
-      setError("Choose a player name to enter the room.");
-      return;
-    }
-    if (panel === "name") {
-      saveName(name);
-      setPanel(null);
+      setError("Enter your player name.");
       return;
     }
     setBusy(true);
@@ -93,282 +72,123 @@ export default function Home() {
               name,
             });
       router.push(`/room/${room.code}`);
-    } catch (e) {
-      setError((e as Error).message);
+    } catch (error) {
+      setError((error as Error).message);
     } finally {
       setBusy(false);
     }
   }
   return (
-    <div className="site-shell">
-      <header className="header">
-        <Logo />
-        <nav aria-label="Main navigation">
-          <PreferencesButton />
-          <Link
-            href="/stats"
-            className="text-button"
-            aria-label="Personal statistics"
-          >
-            <Trophy size={17} />
-            <span>Stats</span>
-          </Link>
-          <button
-            className="text-button how-button"
-            onClick={() => open("rules")}
-          >
-            <CircleHelp size={17} /> How to play
-          </button>
-          <button
-            className="profile-button"
-            aria-label={name || "Set your name"}
-            onClick={() => open("name")}
-          >
-            <span className="avatar small">
-              <UserRound size={17} />
+    <div className="app-shell home-shell">
+      <TopNav
+        home
+        settings={
+          <label className="setting-field">
+            Player name
+            <input
+              autoComplete="nickname"
+              maxLength={20}
+              value={name}
+              onChange={(event) => {
+                setName(event.target.value);
+                saveName(event.target.value);
+              }}
+            />
+          </label>
+        }
+      />
+      <main className="home-hub">
+        <section className="hub-copy" aria-labelledby="home-title">
+          <h1 id="home-title">
+            Your word.
+            <br />
+            Against theirs.
+          </h1>
+          <p>Six guesses. One word. A round with your friends.</p>
+          <div className="hub-actions">
+            <button className="button primary" onClick={() => open("create")}>
+              <Plus size={19} />
+              Create a room
+              <ArrowRight size={19} />
+            </button>
+            <button className="button secondary" onClick={() => open("join")}>
+              <Hash size={18} />
+              Join with code
+            </button>
+          </div>
+          <div className="hub-solo">
+            <Link href="/unlimited" aria-label="Play Wordle Unlimited">
+              Play solo
+              <ArrowUpRight size={17} />
+            </Link>
+            <Link href="/daily">
+              Daily challenge
+              <ArrowUpRight size={17} />
+            </Link>
+            <button onClick={() => open("rules")}>
+              <CircleHelp size={17} />
+              How to play
+            </button>
+          </div>
+          <p className="hub-formats">1v1 · 2v2 · Free-for-all</p>
+        </section>
+        <section
+          className="match-preview"
+          aria-label="Illustrative match preview"
+          data-ui
+        >
+          <div className="preview-heading">
+            <h2>Match preview</h2>
+            <span>Round 2 / 5</span>
+          </div>
+          <div className="preview-score">
+            <span>
+              You
+              <strong>
+                3 <small>pts</small>
+              </strong>
             </span>
-            <span>{name || "Set your name"}</span>
-          </button>
-        </nav>
-      </header>
-      <main>
-        <section className="hero">
-          <div className="hero-copy">
-            <h1>
-              Good words.
-              <br />
-              Great{" "}
-              <span className="rivals">
-                rivals
-                <svg viewBox="0 0 300 20" aria-hidden="true">
-                  <path d="M4 13Q145 -3 293 10M45 18Q170 9 265 15" />
-                </svg>
-              </span>
-              .
-            </h1>
-            <p className="hero-description">
-              The word game you know.
-              <br />
-              The friends you want to beat.
-            </p>
-            <p className="hero-detail">
-              Same word. Six guesses. Race your friends through
-              <br className="desktop-break" /> round after round of friendly
-              competition.
-            </p>
-            <div className="hero-actions">
-              <button className="button primary" onClick={() => open("create")}>
-                <Plus size={20} /> Create a room <ArrowRight size={19} />
-              </button>
-              <button className="button secondary" onClick={() => open("join")}>
-                <Hash size={18} /> Join a room
-              </button>
-            </div>
-            <div className="solo-entries">
-              <Link className="solo-entry" href="/daily">
-                <Flag size={18} /> Play today’s challenge{" "}
-                <ArrowRight size={15} />
-              </Link>
-              <Link className="solo-entry" href="/unlimited">
-                <InfinityIcon size={18} /> Play Wordle Unlimited{" "}
-                <ArrowRight size={15} />
-              </Link>
-            </div>
-            <div className="quick-facts">
-              <span>
-                <Check size={14} /> No account needed
-              </span>
-              <span>
-                <Users size={14} /> 2–16 friends
-              </span>
-            </div>
+            <span className="preview-clock">01:28</span>
+            <span>
+              Rival
+              <strong>
+                2 <small>pts</small>
+              </strong>
+            </span>
           </div>
           <div
-            className="hero-art"
-            role="img"
-            aria-label="Illustrative match preview: a player solves SMILE in three guesses"
+            className="preview-grid"
+            aria-label="Example board, RALLY solved in three guesses"
           >
-            <div className="art-orbit orbit-one" />
-            <div className="art-orbit orbit-two" />
-            <div className="rival-slip">
-              <span className="avatar ochre">
-                <UserRound size={18} />
-              </span>
-              <div>
-                <strong>Your rival</strong>
-                <span>Still thinking…</span>
-              </div>
-              <span className="thinking-dots">•••</span>
-            </div>
-            <div className="preview-board">
-              <div className="preview-top">
-                <span>
-                  <span className="live-dot" /> A little friendly competition
-                </span>
-                <small>PREVIEW</small>
-              </div>
-              <div className="preview-info">
-                <span>
-                  ROUND <strong>03 / 05</strong>
-                </span>
-                <span>
-                  <Clock3 size={14} /> 00:42
-                </span>
-              </div>
-              <div className="preview-grid">
-                {previewRows.map((row, r) => (
-                  <div className="tile-row" key={row.word}>
-                    {row.word.split("").map((letter, c) => (
-                      <span
-                        className={`tile ${row.marks[c]} ${r === 2 ? "winning-tile" : ""}`}
-                        style={{ "--cell": c } as React.CSSProperties}
-                        key={c}
-                      >
-                        {letter}
-                      </span>
-                    ))}
-                  </div>
+            {Array.from({ length: 6 }, (_, row) => (
+              <div className="tile-row" key={row}>
+                {Array.from({ length: 5 }, (_, col) => (
+                  <span
+                    key={col}
+                    className={`tile ${preview[row]?.marks[col] ?? ""}`}
+                  >
+                    {preview[row]?.word[col] ?? ""}
+                  </span>
                 ))}
-                <div className="tile-row ghost-row">
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <span className="tile" key={i} />
-                  ))}
-                </div>
               </div>
-              <div className="preview-win">
-                <span className="win-check">
-                  <Check size={18} />
-                </span>
-                <span>That’s the word!</span>
-                <strong>+1 point</strong>
-              </div>
-              <div className="preview-player">
-                <span className="avatar">
-                  <UserRound size={18} />
-                </span>
-                <span>You, probably</span>
-                <span className="mini-points">
-                  3 <span>pts</span>
-                </span>
-              </div>
-            </div>
-            <div className="score-ticket">
-              <span className="trophy-circle">
-                <Trophy size={24} />
-              </span>
-              <div>
-                <strong>Nice one.</strong>
-                <span>Let the bragging begin.</span>
-              </div>
-              <Asterisk className="ticket-star" size={28} aria-hidden="true" />
-            </div>
-            <div className="art-caption">
-              <MoveUpRight size={30} />
-              <span>
-                Same Wordle energy.
-                <br />A lot more rivalry.
-              </span>
-            </div>
-          </div>
-        </section>
-        <section className="mode-section" aria-labelledby="modes-title">
-          <div className="section-heading">
-            <h2 id="modes-title">Pick your kind of rivalry.</h2>
-            <p>One-on-one or the whole group chat.</p>
-          </div>
-          <div className="mode-grid">
-            {(Object.keys(MODES) as Mode[]).map((m, i) => (
-              <button
-                className={`mode-option ${mode === m ? "selected" : ""}`}
-                key={m}
-                onClick={() => setMode(m)}
-                aria-pressed={mode === m}
-              >
-                <span
-                  className={`mode-illustration mode-${m}`}
-                  aria-hidden="true"
-                >
-                  {m === "duel" ? (
-                    <>
-                      <span className="letter-piece">U</span>
-                      <Swords size={24} />
-                      <span className="letter-piece ochre-piece">R</span>
-                    </>
-                  ) : m === "teams" ? (
-                    <>
-                      <span className="double-pieces">
-                        <i>U</i>
-                        <i>S</i>
-                      </span>
-                      <span className="versus">vs</span>
-                      <span className="double-pieces yellow">
-                        <i>U</i>
-                        <i>S</i>
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <span className="letter-piece">U</span>
-                      <span className="versus">vs</span>
-                      <span className="crowd-pieces">
-                        <i>A</i>
-                        <i>L</i>
-                        <i>L</i>
-                      </span>
-                    </>
-                  )}
-                </span>
-                <span className="mode-option-copy">
-                  <strong>
-                    {MODES[m].title}
-                    <small>{MODES[m].label}</small>
-                  </strong>
-                  <span>{MODES[m].description}</span>
-                </span>
-                <span className="selection-dot">
-                  {mode === m && <Check size={13} />}
-                </span>
-              </button>
             ))}
           </div>
-        </section>
-        <section className="how-strip" aria-label="How a match works">
-          <div className="how-intro">
-            <span className="strip-mark">
-              <Flag size={25} />
-            </span>
-            <h2>
-              A room. A code.
-              <br />A score to settle.
-            </h2>
-          </div>
-          <div>
-            <strong>Make it your match</strong>
-            <p>Choose your players, rounds, and time limit.</p>
-          </div>
-          <ChevronRight className="strip-arrow" size={18} />
-          <div>
-            <strong>Rally your friends</strong>
-            <p>Share the room code. Get everyone in.</p>
-          </div>
-          <ChevronRight className="strip-arrow" size={18} />
-          <div>
-            <strong>Let the words fly</strong>
-            <p>Solve the word. Most points wins.</p>
+          <div className="preview-footer">
+            <span>Same word. Your own six guesses.</span>
+            <Link href="/unlimited" aria-label="Start a solo puzzle">
+              <ArrowUpRight size={22} />
+            </Link>
           </div>
         </section>
       </main>
-      <Footer />
       {panel && (
         <Modal
           title={
             panel === "rules"
-              ? "Six guesses. Make them count."
+              ? "How to play"
               : panel === "create"
-                ? "Make it your match."
-                : panel === "join"
-                  ? "Find your rivals."
-                  : "What should we call you?"
+                ? "Create a room"
+                : "Join a room"
           }
           close={() => !busy && setPanel(null)}
           wide={panel === "create"}
@@ -377,59 +197,49 @@ export default function Home() {
             <Rules />
           ) : (
             <form onSubmit={submit} className="setup-form">
-              <p className="form-intro">
-                {panel === "create"
-                  ? "Set the rules. We’ll get you a room code."
-                  : panel === "join"
-                    ? "Your friends are one room code away."
-                    : "Your name is remembered on this browser."}
-              </p>
               <label>
                 Your player name
                 <input
-                  autoComplete="nickname"
-                  maxLength={20}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Word wizard"
+                  onChange={(event) => setName(event.target.value)}
+                  maxLength={20}
+                  autoComplete="nickname"
                   required
                 />
               </label>
-              {panel === "join" && (
+              {panel === "join" ? (
                 <label>
                   Room code
                   <input
                     className="code-input"
                     value={code}
-                    onChange={(e) =>
+                    onChange={(event) =>
                       setCode(
-                        e.target.value
+                        event.target.value
                           .replace(/[^a-zA-Z2-9]/g, "")
                           .toUpperCase(),
                       )
                     }
                     minLength={6}
                     maxLength={6}
-                    placeholder="ABC123"
-                    required
                     autoComplete="off"
+                    placeholder="Six-character code"
+                    required
                   />
                 </label>
-              )}
-              {panel === "create" && (
+              ) : (
                 <>
                   <fieldset>
                     <legend>Game mode</legend>
                     <div className="segmented">
-                      {(Object.keys(MODES) as Mode[]).map((m) => (
+                      {(Object.keys(MODES) as Mode[]).map((key) => (
                         <button
+                          key={key}
                           type="button"
-                          className={mode === m ? "active" : ""}
-                          onClick={() => setMode(m)}
-                          key={m}
-                          aria-pressed={mode === m}
+                          aria-pressed={mode === key}
+                          onClick={() => setMode(key)}
                         >
-                          {MODES[m].label}
+                          {MODES[key].label}
                         </button>
                       ))}
                     </div>
@@ -442,11 +252,13 @@ export default function Home() {
                           mode === "duel" ? 2 : mode === "teams" ? 4 : players
                         }
                         disabled={mode !== "free"}
-                        onChange={(e) => setPlayers(Number(e.target.value))}
+                        onChange={(event) =>
+                          setPlayers(Number(event.target.value))
+                        }
                       >
-                        {Array.from({ length: 15 }, (_, i) => (
-                          <option value={i + 2} key={i}>
-                            {i + 2} players
+                        {Array.from({ length: 15 }, (_, index) => (
+                          <option key={index} value={index + 2}>
+                            {index + 2} players
                           </option>
                         ))}
                       </select>
@@ -455,126 +267,110 @@ export default function Home() {
                       Number of rounds
                       <select
                         value={rounds}
-                        onChange={(e) => setRounds(Number(e.target.value))}
+                        onChange={(event) =>
+                          setRounds(Number(event.target.value))
+                        }
                       >
-                        {Array.from({ length: 20 }, (_, i) => (
-                          <option value={i + 1} key={i}>
-                            {i + 1} {i === 0 ? "round" : "rounds"}
+                        {Array.from({ length: 20 }, (_, index) => (
+                          <option key={index} value={index + 1}>
+                            {index + 1}
                           </option>
                         ))}
                       </select>
                     </label>
                   </div>
-                  <label>
-                    Time per round
-                    <select
-                      value={seconds}
-                      onChange={(e) => setSeconds(Number(e.target.value))}
-                    >
-                      {[0, 30, 60, 90, 120, 180, 300].map((s) => (
-                        <option value={s} key={s}>
-                          {s === 0
-                            ? "No time limit"
-                            : s < 60
-                              ? `${s} seconds`
-                              : `${s / 60} ${s === 60 ? "minute" : "minutes"}`}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
                   <div className="form-grid">
+                    <label>
+                      Time per round
+                      <select
+                        value={seconds}
+                        onChange={(event) =>
+                          setSeconds(Number(event.target.value))
+                        }
+                      >
+                        {[0, 30, 60, 90, 120, 180, 300].map((value) => (
+                          <option key={value} value={value}>
+                            {value === 0 ? "No time limit" : `${value} seconds`}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                     <label>
                       Scoring
                       <select
                         value={scoring}
-                        onChange={(e) =>
-                          setScoring(e.target.value as typeof scoring)
+                        onChange={(event) =>
+                          setScoring(event.target.value as typeof scoring)
                         }
                       >
-                        <option value="classic">
-                          Classic · 1 point per solve
-                        </option>
-                        <option value="bonus">
-                          Guess bonus · 6 to 1 points
-                        </option>
+                        <option value="classic">Classic · 1 point</option>
+                        <option value="bonus">Guess bonus · 6–1 points</option>
                       </select>
                     </label>
+                  </div>
+                  <div className="form-grid">
                     <label>
                       Word difficulty
                       <select
                         value={difficulty}
-                        onChange={(e) =>
-                          setDifficulty(e.target.value as typeof difficulty)
+                        onChange={(event) =>
+                          setDifficulty(event.target.value as typeof difficulty)
                         }
                       >
                         <option value="familiar">Familiar</option>
                         <option value="challenging">Challenging</option>
-                        <option value="mixed">Mixed</option>
+                        <option value="mixed">Random mix</option>
+                      </select>
+                    </label>
+                    <label>
+                      Match format
+                      <select
+                        value={matches === 1 ? "single" : "championship"}
+                        onChange={(event) =>
+                          setMatches(event.target.value === "single" ? 1 : 3)
+                        }
+                      >
+                        <option value="single">Single match</option>
+                        <option value="championship">Championship</option>
                       </select>
                     </label>
                   </div>
-                  <label>
-                    Match format
-                    <select
-                      value={matches === 1 ? "single" : "championship"}
-                      onChange={(e) =>
-                        setMatches(e.target.value === "single" ? 1 : 3)
-                      }
-                    >
-                      <option value="single">Single match</option>
-                      <option value="championship">
-                        Championship tournament
-                      </option>
-                    </select>
-                  </label>
                   {matches > 1 && (
                     <label>
                       Number of matches
                       <select
                         value={matches}
-                        onChange={(e) => setMatches(Number(e.target.value))}
+                        onChange={(event) =>
+                          setMatches(Number(event.target.value))
+                        }
                       >
-                        {Array.from({ length: 9 }, (_, i) => (
-                          <option key={i} value={i + 2}>
-                            {i + 2} matches
+                        {Array.from({ length: 9 }, (_, index) => (
+                          <option key={index} value={index + 2}>
+                            {index + 2}
                           </option>
                         ))}
                       </select>
                       <small>
-                        {rounds} rounds per match. Points add up across all{" "}
-                        {matches} matches. Ties share the title.
+                        Points carry across matches. Tied leaders share the
+                        title.
                       </small>
                     </label>
                   )}
-                  <div className="form-note">
-                    <Zap size={16} />
-                    <span>
-                      {scoring === "bonus"
-                        ? "Solve in guesses 1–6 to earn 6, 5, 4, 3, 2, or 1 points."
-                        : "Six guesses each. Every solver earns 1 point."}
-                      {mode === "teams" && " Team points are added together."}
-                    </span>
-                  </div>
                 </>
               )}
               {error && (
-                <p role="alert" className="error-message">
+                <p className="error-message" role="alert">
                   {error}
                 </p>
               )}
               <button className="button primary full" disabled={busy}>
                 {busy
-                  ? "Opening your room…"
+                  ? "Opening room…"
                   : panel === "create"
                     ? "Create room"
-                    : panel === "join"
-                      ? "Join room"
-                      : "Save player name"}
-                {!busy && <ArrowRight size={18} />}
+                    : "Join room"}
+                <ArrowRight size={18} />
               </button>
-              <span className="privacy-note">
-                No sign-up. Just your name and a little competitive spirit.
-              </span>
             </form>
           )}
         </Modal>

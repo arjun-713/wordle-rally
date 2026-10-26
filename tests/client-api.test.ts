@@ -1,5 +1,5 @@
-import test from "node:test";
 import assert from "node:assert/strict";
+import test from "node:test";
 import { api, ApiError, isGuessRejection } from "../lib/client-api";
 
 test("client API retains typed guess rejection errors and successful response data", async (t) => {
@@ -37,8 +37,8 @@ test("a stalled fetch times out and aborts without retrying a mutation", async (
   );
   assert.equal(calls, 1);
   assert.equal(signal?.aborted, true);
-});
-test("the deadline also covers a stalled response body", async (t) => {
+
+  // A response whose body never arrives shares the same deadline.
   t.mock.method(
     globalThis,
     "fetch",

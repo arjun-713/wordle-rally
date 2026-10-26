@@ -1,67 +1,41 @@
-# Word Rally release verification
+# Wordrally release verification
 
-The release audit exercises separate browser identities in duels, teams, free-for-all, championships, Daily and Unlimited. Additional playtests choose words by filtering the candidate dictionary using acknowledged letter feedback, including a player exhausting all six attempts while rivals continue, phone touch input, and multi-round scoring.
+## Editorial Arcade redesign
 
-## Issues fixed before first publication
+The existing Next.js application is redesigned in place. Room routes, API contracts, Redis behavior, guarded mutations, answer evaluation, scoring, deadlines, history and persisted identity remain unchanged. The answer catalog expansion changes which words future random puzzles can select.
 
-- Daily initially fetched a new puzzle and statistics concurrently. A delayed first puzzle request reproduced the missing identity-cookie race. Stats now wait until puzzle initialization establishes the cookie.
-- Oversized chunked requests were buffered completely before rejection. The body reader now cancels after crossing 4,096 bytes.
-- A previous match's delayed guess could target round zero of a rematch. Each match now has a unique ID, required for guesses and round advancement.
-- The repository's public daily word order predicted future answers. Production uses a server-only stable secret to permute the reserved pool; the secret is stored as a sensitive Vercel environment variable.
+| Surface         | Question answered                                  | Primary action                                              |
+| --------------- | -------------------------------------------------- | ----------------------------------------------------------- |
+| Home            | Who am I playing with?                             | Create a room; Join with code                               |
+| Setup / lobby   | What are the rules, and who joined?                | Share the actual invite; host starts                        |
+| Solo / Daily    | What is my next guess?                             | Centred board and keyboard                                  |
+| Multiplayer     | What is my next guess, and how is the round going? | Same board with scores, deadline and private attempt counts |
+| Result          | What happened, and what next?                      | Retained board, actual points, Next / Rematch               |
+| Statistics      | How have I played?                                 | Separate real records and guess distribution                |
+| Settings / Help | What can I change or learn?                        | Native accessible dialog                                    |
 
-## Checks
+Manrope, the supplied warm-paper palette, tactile tiles and a dark scorecard define the interface. The active game has no stats rail, storage notice or permanent letter legend. Help retains the legend. Difficulty changes apply to the next puzzle. Optional feedback and reduced-motion behavior remain supported.
 
-Release run: **48 rule/service tests passed** on both the file backend and real Redis; **15 browser flows passed in one full run**; TypeScript and production build passed; `npm audit --omit=dev` reported **0 vulnerabilities**. All 16 production client JavaScript files were scanned for server answer-array, history-key, and daily-secret markers; none were found.
+Design Taste's app draw selected Editorial greeting (seed 912192959). One shell redraw replaced the tinted L-frame with open-plane; the explicit gameplay brief takes precedence over its generic sidebar/KPI pattern. No prototype HTML existed in the checkout, `/tmp` or Downloads, so implementation follows the written brief. Home's explicitly labelled preview is the only illustrative match; it has no networking logic.
 
-### Multiplayer read optimization
+## Verification
 
-The follow-up optimization passed **54 rule/service tests** on both file storage and real Redis, TypeScript, and a production build. The original 15 browser flows passed together; the added synchronization regression passed after correcting its expected results-heading label. That regression checks slower polling, no extra read after a guess, hidden-tab suspension, an immediate visibility wake-up, finished-host suspension, and guest detection of a rematch. API checks also cover private, minimal unchanged-revision responses and membership validation.
+- **28 focused unit/service checks passed** on file storage. These replace 66 overlapping checks and retain duplicate-letter semantics, six-attempt behavior, Classic/6–1 bonus scoring, Daily, championships, stale requests, privacy, concurrent joins/solves, 16-player capacity, no-repeat history, shared rate limits, atomic storage, request bounds and transport recovery. A catalog contract checks the expansion and reserved Daily vocabulary.
+- **7 browser journeys passed in one full run** against the local production build: room creation/deep-link joining, untimed duel with an exhausted player and rival solve, reconnect/resume, rounds/rematch, hardware/touch input, rejection/reduced motion, sixth-guess win, saved-loss recovery after a withheld response, unsaved-request retry, Daily exhaustion/resume/share, separate statistics, four-client team championship, three-client timed free-for-all, and API privacy/validation. Final modal/navigation focus changes also receive a targeted solo journey rerun.
+- Actual screenshots were inspected at **1440×900, 1366×768, 390×844 and 320×700**, with an additional 2048×1152 centring check. Views include home, setup, lobby, gameplay, results, championship breakdown, statistics, Settings and Help. Keyboard bounds and horizontal overflow were measured. Room-code and invite-link clipboard contents were checked against the real generated code.
+- TypeScript and the optimized production build passed. Thirteen client JavaScript chunks were scanned for answer-catalog prefixes, private history keys and the daily-secret marker; none leaked. No backend or API source files changed.
+- Design source lint reports **0 FAIL**. Browser inspection reports **0 FAIL** after precise home allowances: the user-pinned cream palette, expressive home title, and the probe misclassifying separate preview-grid letters as a three-line headline. Solo's blank-space warnings count empty puzzle tiles as blank content. Modal shadows and clock zero-padding are intentional. No stock photos or decorative motion were added.
 
-Room polling now normally waits five seconds, slowing to fifteen seconds after 45 seconds without a change. Hidden tabs stop, completed hosts stop, and waiting guests gradually slow to thirty seconds. Deadline wake-ups remain independent of that quiet-period delay. A server-only Next.js Data Cache snapshot shares reads between players, with mutation tag invalidation, a ten-second cache-key window, per-player response filtering, and fresh reads whenever the client's known revision or a timed deadline requires them. Writes always use fresh state and atomic compare-and-set. Histories and stats reads use MGET, while persistent transaction writes use MSET.
+The broader historical Redis checks and read benchmarks remain in Git history; Redis optimization logic is unchanged in this release. The retained `test:redis` runner and manual `benchmark:reads` command are available without adding either to ordinary browser testing. This release's current unit run used file storage; its browser runs do not establish hosted latency or physical haptic support.
 
-An isolated production-build comparison sent five polls per player, one second apart, with the snapshot cache disabled and enabled. Real Redis command statistics measured:
+## Vocabulary and limits
 
-| Players | Reads without snapshot cache | Reads with snapshot cache | Reduction |
-| ------- | ---------------------------: | ------------------------: | --------: |
-| 2       |                           10 |                         1 |       90% |
-| 4       |                           20 |                         1 |       95% |
-| 16      |                           80 |                         1 |    98.75% |
+The playable catalog grew from **1,272 to 14,877 answers (11.7x)**. After reserving 366 Daily words, **14,511** are available to random games. Familiar contains 500 frequent words; Challenging has 14,011; Random mix uses all 14,511. Selection already uses server-side `crypto.randomInt`; the larger pool reuses atomic no-repeat history with no new Redis reads. The expanded Wordle vocabulary includes uncommon, regional and inflected words. See [source notes](data/SOURCES.md) for pinned upstream sources and retained licenses.
 
-The same benchmark verified cache invalidation after a guess and that cached snapshots never expose another player's board or an active answer. Run `npm run benchmark:reads` after a production build, with an isolated local Redis server on port 6389 and no other Redis workloads running. This measures quiet polling on local production servers, rather than hosted throughput or guaranteed free-plan play time. Active moves, cold instances, Vercel cache usage, HTTP requests, and bandwidth also affect capacity.
+All advertised modes are implemented: 1v1, 2v2, 2–16 free-for-all, and championships. There is no separate readiness, online heartbeat, countdown, account linking or theme/contrast preference API. The UI shows Joined rather than inventing Ready/Online. Reconnecting is a client transport state and explicit departure remains distinct.
 
-- Game rules, privacy, CAS concurrency, no-repeat histories, scoring, tournaments, and streaming request bounds.
-- Browser reloads, two-player rooms, four-player team totals, free-for-all, exhausted attempts, old-response races, host authorization, blocked rosters, shared daily progress, and saved statistics.
-- Sensitive-path probes for `.env.local`, `.git/config`, `.data/state.json`, and answer JSON files. API responses must exclude raw identity cookies, active answers, future answers, and opponents' guess words.
-- Automated accessibility and responsive checks, production compilation, and dependency audit.
+Daily's existing calendar is unchanged and finite; it starts October 25, 2026 and must be extended before its 366 dates run out. Histories follow remembered browser identities; clearing browser identity or changing devices cannot be linked without accounts. None of these limitations are hidden behind simulated functionality.
 
-### Gameplay request optimization
+## Production
 
-Gameplay limits now reserve four request slots at a time through an atomic Redis script. Each slot is booked against the same shared per-identity, per-bucket, per-minute counter before a warm function instance can use it. The global limits stay at 100 room actions and 120 solo/Daily actions per minute. Creation and joining keep their existing per-request limits. Reservations are serialized within an instance, isolated by identity/bucket/limit/window, bounded to 2,048 local entries, and discarded across minute boundaries. Transport failures grant no slots. An instance disappearing or evicting an entry can leave booked slots unused until the next minute; this makes limits conservative rather than permitting excess traffic. `RALLY_DISABLE_RATE_RESERVATIONS=true` restores per-request limiting for comparisons or rollback.
-
-Room, Unlimited and Daily routes reject malformed and unknown dictionary guesses before accessing Redis. The game engine still checks membership, match IDs, deadlines, repeated guesses, attempts, and scores using fresh state and atomic commits. The production-build benchmark verified zero Redis commands for invalid dictionary guesses across all three routes.
-
-Five-round games, with four accepted guesses per player per round, measured this additional reduction against the previous per-request limiter:
-
-| Players | Previous command executions | Reserved-slot command executions | Reduction |
-| ------- | --------------------------: | -------------------------------: | --------: |
-| 2       |                         275 |                              219 |    20.36% |
-| 4       |                         517 |                              409 |    20.89% |
-| 16      |                       1,969 |                            1,549 |    21.33% |
-
-Redis HTTP requests dropped by 24.09%, 24.51%, and 24.87% respectively. These are local production-build measurements with real Redis, serialized guesses, round advances, and completed statistics; setup and fixture inspection occur outside the measured interval. Concurrent transaction safety is tested separately. Cold instances, different guessing rates, cache misses, and other quota consumers affect hosted savings. The quiet-polling comparison remains in the same benchmark; this run crossed a ten-second snapshot boundary and needed two Redis reads per room rather than one.
-
-The updated suite passes 62 rule/service tests on both storage backends, including shared caps across independent limiter instances, partial reservations, concurrent requests, minute boundaries, failed allocations, eviction, cache pressure, and invalid-word validation. A full cache never evicts pending reservations: overflow requests book one slot directly, while callers waking from completed reservations can still spend their already-booked slots even if the cache subsequently evicts that entry. The Unlimited browser fixture waits for the acknowledged Next word response before inspecting the new puzzle, avoiding a race between its POST and a test-only GET.
-
-### Sixth-guess recovery and rejected-word feedback
-
-A browser regression reproduces the reported pending final-guess screen by allowing the server to save a sixth wrong guess while withholding its HTTP reply. The shared browser API helper previously had no response deadline. It now bounds both fetching and reading the response body to 12 seconds, aborts stalled work, and preserves caller cancellation. Unlimited checks the saved puzzle after a failed guess request. It confirms a saved submission only when the game ID, increased guess count and submitted word match; it never blindly repeats the mutation. If the guess was not saved or the connection remains unavailable, controls unlock and retain the word for retry. Pending and recovery states announce what is being checked.
-
-Dictionary, length and duplicate-word rejections carry an `INVALID_GUESS` code and wiggle only the current row. They retain the word without showing an alert panel. The error outline uses the existing `error-ink` token, with a screen-reader announcement and no movement under reduced motion. Other failures retain recoverable error messages. This shared behavior applies to rooms, Daily and Unlimited. Invalid dictionary words still require zero Redis commands.
-
-Verification passes 66 tests on both file storage and real Redis, a production build, TypeScript, and 20 browser flows. New browser regressions cover a committed sixth-guess loss with a stalled reply, a sixth-guess win followed by Next word, a failed unsaved final guess followed by a single retry, row-only rejection motion, and reduced-motion feedback. Captures verify pending, loss and rejection states at phone, desktop and wide widths. Environment credential files named `.aws` are excluded from Git and deployment uploads.
-
-## Production setup
-
-Vercel project: `wordle-rally`, linked to `arjun-713/wordle-rally`. Node 22.x and Mumbai functions are pinned. Publishing is manual via Vercel CLI; Git pushes do not automatically publish. Upstash `wordle-rally-redis` is connected to Production on the Free plan; Mumbai and eviction off were selected during setup. The application accepts the native `KV_REST_API_URL` / `KV_REST_API_TOKEN` credentials provisioned by that integration, as well as explicit `UPSTASH_REDIS_*` credentials. Credential pairs are never mixed and read-only tokens are not used for writes. Four configuration regressions verify those rules. The daily scheduling secret is configured in Vercel; no secrets are committed.
-
-Local QA cannot establish hosted latency or physical haptic support. A successful deployment must additionally pass live multiplayer persistence and secure-cookie checks before being reported as ready for friends.
+The linked Vercel project is `wordle-rally` at [wordle-rally.vercel.app](https://wordle-rally.vercel.app). Production uses Node 22, Mumbai functions, the existing writable Redis credential pair and server-only Daily secret. Deployment is manual through Vercel CLI; `--no-wait` submits the deployment without monitoring build logs. Local validation is not a claim that a newly submitted hosted deployment is already ready.

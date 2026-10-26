@@ -7,14 +7,14 @@ export default function Icon() {
       style={{
         width: 64,
         height: 64,
-        background: "#426c48",
-        color: "white",
+        background: "#D8EE81",
+        color: "#17211D",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         fontSize: 43,
         fontWeight: 800,
-        borderRadius: 12,
+        borderRadius: 6,
       }}
     >
       W

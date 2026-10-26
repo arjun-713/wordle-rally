@@ -1,19 +1,13 @@
 "use client";
-import { useEffect, useRef, type ReactNode } from "react";
-import { ArrowUpRight, X } from "lucide-react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
+import { X } from "lucide-react";
 import Link from "next/link";
 export { api } from "@/lib/client-api";
+
 export function Logo() {
   return (
-    <Link href="/" className="logo" aria-label="Word Rally home">
-      <span className="logo-tiles" aria-hidden="true">
-        <i>W</i>
-        <i>R</i>
-      </span>
-      <span>
-        word<span className="logo-light">rally</span>
-        <span className="logo-dot">.</span>
-      </span>
+    <Link href="/" className="logo" aria-label="Wordrally home">
+      wordrally<span aria-hidden="true">.</span>
     </Link>
   );
 }
@@ -28,88 +22,120 @@ export function Modal({
   close: () => void;
   wide?: boolean;
 }) {
-  const ref = useRef<HTMLDialogElement>(null);
+  const ref = useRef<HTMLDialogElement>(null),
+    titleId = useId();
   useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
     ref.current?.showModal();
+    return () => previous?.focus();
   }, []);
   return (
     <dialog
       ref={ref}
       className={`modal ${wide ? "wide" : ""}`}
-      onCancel={close}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) close();
+      onCancel={(event) => {
+        event.preventDefault();
+        close();
       }}
-      aria-labelledby="dialog-title"
+      onClick={(event) => {
+        if (event.target !== event.currentTarget) return;
+        const bounds = event.currentTarget.getBoundingClientRect();
+        if (
+          event.clientX < bounds.left ||
+          event.clientX > bounds.right ||
+          event.clientY < bounds.top ||
+          event.clientY > bounds.bottom
+        )
+          close();
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const controls = Array.from(
+          event.currentTarget.querySelectorAll<HTMLElement>(
+            "button:not(:disabled), a[href], input:not(:disabled):not([type=hidden]), select:not(:disabled), textarea:not(:disabled), [tabindex='0']",
+          ),
+        ).filter((element) => element.getClientRects().length > 0);
+        const first = controls[0],
+          last = controls.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }}
+      aria-labelledby={titleId}
     >
       <div className="modal-head">
-        <h2 id="dialog-title">{title}</h2>
+        <h2 id={titleId}>{title}</h2>
         <button
           className="icon-button"
           aria-label="Close dialog"
           onClick={close}
         >
-          <X size={22} />
+          <X size={20} />
         </button>
       </div>
       {children}
     </dialog>
   );
 }
-export function Rules() {
+export function BoardLegend() {
   return (
-    <div className="rules">
-      <p>One five-letter word. Six guesses. A room full of rivals.</p>
-      <div className="example-tiles">
-        <span className="tile correct">W</span>
-        <span className="tile present">O</span>
-        <span className="tile absent">R</span>
-        <span className="tile">D</span>
-        <span className="tile">S</span>
-      </div>
-      <ul>
-        <li>
-          <strong>Green:</strong> right letter, right place.
-        </li>
-        <li>
-          <strong>Yellow:</strong> right letter, different place.
-        </li>
-        <li>
-          <strong>Gray:</strong> that letter is not available in the answer.
-        </li>
-      </ul>
-      <p>
-        Everyone gets the same word and their own six attempts. Every solve
-        earns <strong>1 point in Classic</strong>. Guess bonus scoring awards{" "}
-        <strong>6, 5, 4, 3, 2, or 1 points</strong> for solving in guesses 1
-        through 6. Timed rooms have a shared deadline; untimed rooms let
-        everyone use their six guesses at their own pace. Used all your guesses?
-        Others can still finish.
-      </p>
-      <p>
-        In 2v2, your individual points add to your team total. In free-for-all,
-        every player competes individually. Ties are shared wins.
-      </p>
-      <p>
-        The host starts each round. No one solves? No one scores. Championships
-        add points across several matches with the same players or teams.
-      </p>
+    <div className="board-legend" aria-label="Letter feedback guide">
+      <span>
+        <i className="correct" />
+        Correct
+      </span>
+      <span>
+        <i className="present" />
+        Elsewhere
+      </span>
+      <span>
+        <i className="absent" />
+        Absent
+      </span>
     </div>
   );
 }
-export function Footer() {
+export function Rules() {
   return (
-    <footer className="footer">
-      <span>Five letters. Unlimited bragging rights.</span>
-      <a
-        href="https://github.com/dwyl/english-words"
-        target="_blank"
-        rel="noreferrer"
-      >
-        Dictionary source <ArrowUpRight size={13} />
-      </a>
-      <span>Made for a little friendly rivalry.</span>
-    </footer>
+    <div className="rules">
+      <p>
+        Find the five-letter word in six guesses. Enter submits; Backspace
+        deletes.
+      </p>
+      <BoardLegend />
+      <ul>
+        <li>
+          <strong>Correct:</strong> the right letter in the right place.
+        </li>
+        <li>
+          <strong>Elsewhere:</strong> the letter belongs in another position.
+        </li>
+        <li>
+          <strong>Absent:</strong> no remaining copy of that letter is in the
+          word.
+        </li>
+      </ul>
+      <h3>With friends</h3>
+      <p>
+        Everyone gets the same word and their own board. Classic awards 1 point
+        per solve; Guess bonus awards 6–1 points for guesses 1–6. An unsolved
+        word earns no points.
+      </p>
+      <p>
+        Using all six guesses ends your turn. Others keep playing. Team scores
+        add both players’ points. The host starts and advances rounds; tied
+        leaders share the win.
+      </p>
+      <h3>Solo & daily</h3>
+      <p>
+        Unlimited offers a new puzzle after each result. Daily gives everyone
+        one shared puzzle per UTC day. Neither has a round timer.
+      </p>
+    </div>
   );
 }
 export function savedName() {
@@ -123,6 +149,6 @@ export function saveName(name: string) {
   try {
     localStorage.setItem("rally-name", name.trim());
   } catch {
-    /* The room still works when name persistence is blocked. */
+    /* Optional persistence. */
   }
 }

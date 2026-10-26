@@ -3,26 +3,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
-  Check,
   CircleHelp,
-  Infinity as InfinityIcon,
+  Copy,
   LoaderCircle,
-  Trophy,
-  Users,
-  CalendarDays,
-  BarChart3,
-  Share2,
+  Shuffle,
 } from "lucide-react";
-import { PreferencesButton } from "./preferences";
-import type { StatsBook, Difficulty, PublicSoloGame } from "@/lib/types";
-import { api, Logo, Modal } from "./shared";
-import { WordPlay } from "./word-play";
+import type { Difficulty, PublicSoloGame } from "@/lib/types";
 import { isGuessRejection } from "@/lib/client-api";
-
+import { api, Modal, Rules } from "./shared";
+import { TopNav } from "./navigation";
+import { WordPlay } from "./word-play";
 export default function SoloClient({ daily = false }: { daily?: boolean }) {
   const endpoint = daily ? "/api/daily" : "/api/solo";
   const [level, setLevel] = useState<Difficulty>("mixed");
-  const [book, setBook] = useState<StatsBook | null>(null);
   const [clock, setClock] = useState(Date.now());
   const [shared, setShared] = useState(false);
   const currentId = useRef("");
@@ -74,13 +67,8 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
     return () => document.removeEventListener("visibilitychange", sync);
   }, [apply, endpoint]);
   useEffect(() => {
-    if (daily && game)
-      void api<StatsBook>("/api/stats")
-        .then(setBook)
-        .catch(() => {});
-  }, [daily, game?.status, game?.id]);
-  useEffect(() => {
     if (game?.difficulty) setLevel(game.difficulty);
+    setShared(false);
   }, [game?.id]);
   useEffect(() => {
     if (!daily) return;
@@ -102,8 +90,8 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
   }, [clock, daily, game?.date, refresh]);
   async function share() {
     if (!game) return;
-    const squares = { correct: "🟩", present: "🟨", absent: "⬜" };
-    const text = `Word Rally Daily #${game.number} · ${game.date}\n${game.status === "won" ? game.guesses.length : "X"}/6\n${game.guesses.map((g) => g.marks.map((m) => squares[m]).join("")).join("\n")}`;
+    const squares = { correct: "🟩", present: "🟨", absent: "⬜" }; // taste-skill-ignore: standard spoiler-free Wordle share text, never rendered as UI.
+    const text = `Wordrally ${daily ? `Daily #${game.number} · ${game.date}` : "Unlimited"}\n${game.status === "won" ? game.guesses.length : "X"}/6\n${game.guesses.map((g) => g.marks.map((m) => squares[m]).join("")).join("\n")}`;
     try {
       await navigator.clipboard.writeText(text);
       setShared(true);
@@ -163,312 +151,156 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
       setCheckingSaved(false);
     }
   }
-  const finished = game && game.status !== "playing";
+  const finished = !!game && game.status !== "playing";
   return (
-    <div className="site-shell room-shell room-playing solo-shell">
-      <header className="header">
-        <Logo />
-        <nav className="room-nav" aria-label="Solo navigation">
-          <PreferencesButton />
-          <Link
-            href="/stats"
-            className="text-button"
-            aria-label="Personal statistics"
-          >
-            <BarChart3 size={18} />
-            <span>Stats</span>
-          </Link>
-          <Link href="/" className="text-button" aria-label="Play with friends">
-            <Users size={17} />
-            <span>Play with friends</span>
-          </Link>
-          <button
-            className="text-button"
-            aria-label="How to play"
-            onClick={() => setHelp(true)}
-          >
-            <CircleHelp size={17} />
-            <span>How to play</span>
-          </button>
-        </nav>
-      </header>
-      <main className="room-main">
-        <div className="room-title-row">
+    <div className="app-shell play-shell">
+      <TopNav
+        settings={
+          !daily && (
+            <label className="setting-field">
+              Next puzzle difficulty
+              <select
+                value={level}
+                onChange={(event) => setLevel(event.target.value as Difficulty)}
+              >
+                <option value="familiar">Familiar</option>
+                <option value="challenging">Challenging</option>
+                <option value="mixed">Random mix</option>
+              </select>
+              <small>Applies to your next puzzle.</small>
+            </label>
+          )
+        }
+      />
+      <main className="play-main">
+        <div className="game-context">
           <div>
-            <h1>{daily ? "The daily challenge" : "Wordle Unlimited"}</h1>
-            <p className="back-label">
-              {daily
-                ? "One word. Everyone gets the same six chances."
-                : "A fresh word whenever you’re ready."}
-            </p>
+            <h1>{daily ? "Daily challenge" : "Unlimited"}</h1>
+            {game && (
+              <span className="context-meta">
+                {daily
+                  ? `#${game.number}`
+                  : `Puzzle ${game.stats.played + (finished ? 0 : 1)}`}
+              </span>
+            )}
           </div>
-          <span className="solo-time">
-            {daily ? <CalendarDays size={20} /> : <InfinityIcon size={20} />}
-            {daily ? "Resets at 00:00 UTC" : "No time limit"}
-          </span>
+          <div>
+            <span className="guess-count">{game?.guesses.length ?? 0} / 6</span>
+            <button
+              className="icon-button"
+              aria-label="How to play"
+              onClick={() => setHelp(true)}
+            >
+              <CircleHelp size={19} />
+            </button>
+          </div>
         </div>
-        {loading ? (
-          <div className="room-loading" role="status">
-            <LoaderCircle className="spinner" size={28} />
-            <p>Picking your next word…</p>
+        {error && (
+          <div className="game-error" role="alert">
+            <span>{error}</span>
+            <button onClick={() => void refresh()}>Retry</button>
+            {daily && !game && <Link href="/unlimited">Play Unlimited</Link>}
           </div>
-        ) : (
-          <>
-            {error && (
-              <div className="room-error error-message" role="alert">
-                <span>{error}</span>
-                {daily && !game && (
-                  <Link href="/unlimited" className="text-button">
-                    Play Unlimited <ArrowRight size={16} />
-                  </Link>
-                )}
-                <button className="text-button" onClick={() => void refresh()}>
-                  Refresh game
-                </button>
-              </div>
-            )}
-            {game ? (
-              <div className="game-layout solo-layout">
-                <section className="game-panel" aria-label="Solo puzzle">
-                  <div className="game-toolbar">
-                    <span className="round-counter">
-                      {daily ? "Daily" : "Puzzle"}{" "}
-                      <strong>
-                        {daily
-                          ? `#${game.number}`
-                          : game.stats.played +
-                            (game.status === "playing" ? 1 : 0)}
-                      </strong>
-                    </span>
-                    <span className="timer solo-timer">
-                      {daily ? (
-                        <CalendarDays size={19} />
-                      ) : (
-                        <InfinityIcon size={19} />
-                      )}
-                      <span>{daily ? game.date : "At your own pace"}</span>
-                    </span>
-                    <span className="attempt-count">
-                      {game.guesses.length} / 6 guesses
-                    </span>
-                  </div>
-                  <div
-                    className="board-status solo-status"
-                    role="status"
-                    aria-live="polite"
-                  >
-                    <strong>
-                      {pendingGuess
-                        ? checkingSaved
-                          ? "Checking your saved result…"
-                          : "Checking your guess…"
-                        : game.status === "won"
-                          ? "That’s the word. Nice one!"
-                          : game.status === "lost"
-                            ? "A tricky one. Try another?"
-                            : "Just you and five letters."}
-                    </strong>
-                    <span>
-                      {finished ? (
-                        <>
-                          The word was{" "}
-                          <strong className="solo-answer">
-                            {game.answer?.toUpperCase()}
-                          </strong>
-                          .
-                        </>
-                      ) : (
-                        "Six guesses. No clock. Find your word."
-                      )}
-                    </span>
-                  </div>
-                  <WordPlay
-                    key={game.id}
-                    guesses={game.guesses}
-                    playable={
-                      game.status === "playing" &&
-                      !help &&
-                      (!daily || clock < (game.resetsAt ?? Infinity))
-                    }
-                    busy={busy}
-                    onError={setError}
-                    onGuess={(word) => action({ action: "guess", word })}
-                  />
-                  {finished && daily && (
-                    <div className="solo-next daily-next">
-                      <button
-                        className="button primary"
-                        onClick={() => void share()}
-                      >
-                        <Share2 size={18} />
-                        {shared ? "Result copied" : "Share result"}
-                      </button>
-                      <Link href="/unlimited" className="text-button">
-                        Keep playing Unlimited <ArrowRight size={16} />
-                      </Link>
-                    </div>
-                  )}
-                  {finished && !daily && (
-                    <div className="solo-next">
-                      <button
-                        className="button primary"
-                        disabled={busy}
-                        onClick={() => void action({ action: "next" })}
-                      >
-                        {busy ? "Picking a word…" : "Next word"}
-                        <ArrowRight size={18} />
-                      </button>
-                      <span>Your next puzzle is one click away.</span>
-                    </div>
-                  )}
-                  <div className="board-legend">
-                    <span>
-                      <i className="correct" />
-                      Right place
-                    </span>
-                    <span>
-                      <i className="present" />
-                      Wrong place
-                    </span>
-                    <span>
-                      <i className="absent" />
-                      Not in word
-                    </span>
-                  </div>
-                </section>
-                <aside className="solo-sidebar">
-                  <h2>
-                    <Trophy size={21} />{" "}
-                    {daily ? "Your daily run" : "Your word run"}
-                  </h2>
-                  <dl className="solo-stats">
-                    <div>
-                      <dt>Games played</dt>
-                      <dd>
-                        {daily ? (book?.daily.played ?? 0) : game.stats.played}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Words solved</dt>
-                      <dd>
-                        {daily ? (book?.daily.wins ?? 0) : game.stats.wins}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Current streak</dt>
-                      <dd>
-                        {daily ? (book?.daily.streak ?? 0) : game.stats.streak}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt>Best streak</dt>
-                      <dd>
-                        {daily
-                          ? (book?.daily.bestStreak ?? 0)
-                          : game.stats.bestStreak}
-                      </dd>
-                    </div>
-                  </dl>
-                  {daily ? (
-                    <div className="daily-reset">
-                      <strong>Next challenge in</strong>
-                      <span>
-                        {game.resetsAt
-                          ? new Date(Math.max(0, game.resetsAt - clock))
-                              .toISOString()
-                              .slice(11, 19)
-                          : "—"}
-                      </span>
-                      <small>
-                        A new word at midnight UTC. Missed days reset your daily
-                        streak.
-                      </small>
-                    </div>
+        )}
+        {loading ? (
+          <div className="game-loading" role="status">
+            <LoaderCircle className="spinner" size={22} />
+            <span>Loading puzzle…</span>
+          </div>
+        ) : game ? (
+          <section className="game-stage" aria-label="Solo puzzle">
+            <div className="game-status" role="status" aria-live="polite">
+              {pendingGuess ? (
+                checkingSaved ? (
+                  "Checking saved result…"
+                ) : (
+                  "Checking your guess…"
+                )
+              ) : finished ? (
+                game.status === "won" ? (
+                  `Solved in ${game.guesses.length}/6`
+                ) : (
+                  "Out of guesses"
+                )
+              ) : (
+                <span className="sr-only">
+                  Find the five-letter word in six guesses.
+                </span>
+              )}
+            </div>
+            <WordPlay
+              key={game.id}
+              guesses={game.guesses}
+              playable={
+                game.status === "playing" &&
+                !help &&
+                (!daily || clock < (game.resetsAt ?? Infinity))
+              }
+              busy={busy}
+              onError={setError}
+              showKeyboard={!finished}
+              onGuess={(word) => action({ action: "guess", word })}
+            />
+            {finished && (
+              <section className="result-panel" aria-label="Puzzle result">
+                <div className="result-word">
+                  <span>The word</span>
+                  <h2>{game.answer?.toUpperCase()}</h2>
+                </div>
+                <div className="result-actions">
+                  {!daily ? (
+                    <button
+                      className="button primary"
+                      disabled={busy}
+                      onClick={() => void action({ action: "next" })}
+                    >
+                      {busy ? "Picking a word…" : "Next word"}
+                      <Shuffle size={18} />
+                    </button>
                   ) : (
-                    <label className="difficulty-picker">
-                      Next word difficulty
-                      <select
-                        value={level}
-                        onChange={(e) => setLevel(e.target.value as Difficulty)}
-                      >
-                        <option value="familiar">Familiar</option>
-                        <option value="challenging">Challenging</option>
-                        <option value="mixed">Mixed</option>
-                      </select>
-                      <small>
-                        Current puzzle: {game.difficulty ?? "mixed"}. Changes
-                        apply to your next word.
-                      </small>
-                    </label>
+                    <Link href="/unlimited" className="button primary">
+                      Play Unlimited
+                      <ArrowRight size={18} />
+                    </Link>
                   )}
-                  <Link href="/stats" className="text-button stats-entry">
-                    See your personal stats <BarChart3 size={17} />
-                  </Link>
-                  <div className="solo-note">
-                    <Check size={18} />
-                    <div>
-                      <strong>Pick up where you left off.</strong>
-                      <p>
-                        Your puzzle and stats are saved for this browser. Daily
-                        words are reserved from new room and Unlimited games.
-                      </p>
-                    </div>
-                  </div>
-                  <Link href="/" className="text-button solo-friends">
-                    Bring your friends next time <ArrowRight size={16} />
-                  </Link>
-                </aside>
-              </div>
-            ) : (
-              !error && (
-                <button
-                  className="button primary"
-                  onClick={() => void refresh()}
-                >
-                  Start a puzzle
-                  <ArrowRight size={18} />
-                </button>
-              )
+                  <button
+                    className="button secondary"
+                    onClick={() => void share()}
+                  >
+                    <Copy size={17} />
+                    {shared ? "Copied" : "Copy result"}
+                  </button>
+                </div>
+                {daily && game.resetsAt && (
+                  <p className="result-detail">
+                    Next daily in{" "}
+                    {new Date(Math.max(0, game.resetsAt - clock))
+                      .toISOString()
+                      .slice(11, 19)}{" "}
+                    · midnight UTC
+                  </p>
+                )}
+              </section>
             )}
-          </>
+            {daily && !finished && (
+              <details className="daily-details">
+                <summary>About today’s puzzle</summary>
+                <p>One shared word for {game.date}. Resets at midnight UTC.</p>
+              </details>
+            )}
+          </section>
+        ) : (
+          !error && (
+            <button className="button primary" onClick={() => void refresh()}>
+              Start a puzzle
+              <ArrowRight size={18} />
+            </button>
+          )
         )}
       </main>
-      <footer className="room-footer">
-        <span>Five letters. A little time for yourself.</span>
-        <span>wordrally.</span>
-      </footer>
       {help && (
-        <Modal title="Six guesses. Your own pace." close={() => setHelp(false)}>
-          <div className="rules">
-            <p>
-              Find the five-letter word in six guesses. Green means the right
-              letter in the right place. Gold means the letter belongs somewhere
-              else. Gray means it is absent.
-            </p>
-            <p>
-              {daily ? (
-                "There is no timer. Finish today’s puzzle, share your result without the answer, and return tomorrow. Unlimited is available between challenges."
-              ) : (
-                <>
-                  There is no timer or daily puzzle limit. After a solve or six
-                  guesses, choose <strong>Next word</strong> to keep playing.
-                </>
-              )}
-            </p>
-            <p>
-              Your current puzzle, wins, and streak are saved for this browser.
-              {daily
-                ? "Today’s puzzle is the same for everyone and resets at midnight UTC. You have one six-guess attempt per day. Daily answers are reserved from new random games."
-                : "Fresh words are selected from the available answer pool, excluding"}
-              {!daily && (
-                <>
-                  your solo and multiplayer history. If the pool runs out, it
-                  will ask for an expanded dictionary rather than silently
-                  repeat answers.
-                </>
-              )}
-            </p>
-          </div>
+        <Modal title="How to play" close={() => setHelp(false)}>
+          <Rules />
         </Modal>
       )}
     </div>

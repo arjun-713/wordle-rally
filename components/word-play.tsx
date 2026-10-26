@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
-import { ArrowRight, Delete, LoaderCircle } from "lucide-react";
+import { Delete } from "lucide-react";
 import { isGuessRejection } from "@/lib/client-api";
 import { feedback, unlockFeedback } from "./preferences";
 import type { Guess, Mark } from "@/lib/types";
@@ -9,10 +9,18 @@ type Props = {
   guesses: Guess[];
   playable: boolean;
   busy: boolean;
+  showKeyboard?: boolean;
   onGuess: (word: string) => Promise<boolean>;
   onError: (message: string) => void;
 };
-export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
+export function WordPlay({
+  guesses,
+  playable,
+  busy,
+  onGuess,
+  onError,
+  showKeyboard = true,
+}: Props) {
   const [input, setInput] = useState("");
   const initialCount = useRef(guesses.length);
   const [rejection, setRejection] = useState("");
@@ -50,7 +58,7 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
         [0, -6, 6, -5, 5, -2, 2, 0].map((x) => ({
           transform: `translateX(${x}px)`,
         })),
-        { duration: 350, easing: "ease-out" },
+        { duration: 240, easing: "ease-out" },
       );
   }
   function clearRejection() {
@@ -113,11 +121,14 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
       const target = e.target as HTMLElement;
       if (
         ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) ||
-        (target.tagName === "BUTTON" && e.key === "Enter")
+        target.isContentEditable ||
+        (["BUTTON", "A", "SUMMARY"].includes(target.tagName) &&
+          e.key === "Enter")
       )
         return;
       if (/^[a-z]$/i.test(e.key) || ["Enter", "Backspace"].includes(e.key)) {
         e.preventDefault();
+        if (e.key !== "Enter") inputRef.current?.focus({ preventScroll: true });
         keypress(e.key.toUpperCase());
       }
     };
@@ -134,80 +145,83 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
     });
   return (
     <>
-      <div
-        className="word-board"
-        role="table"
-        aria-label="Your word board"
-        onClick={() =>
-          playable &&
-          window.matchMedia("(min-width: 601px)").matches &&
-          inputRef.current?.focus()
-        }
+      <form
+        className="word-grid-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+        style={{ "--active-row": guesses.length } as React.CSSProperties}
       >
-        {Array.from({ length: 6 }, (_, r) => {
-          const guess = guesses[r];
-          const active = r === (guesses.length ?? 0) && playable;
-          return (
-            <div
-              className={`tile-row ${active && rejection ? "rejected-row" : ""} ${r >= initialCount.current && guess?.marks.every((m) => m === "correct") ? "winning-row" : ""}`}
-              ref={active ? activeRow : undefined}
-              role="row"
-              key={r}
-              aria-label={`Guess ${r + 1}${guess ? `: ${guess.word.toUpperCase()}` : active ? ": current guess" : ": empty"}`}
-            >
-              {Array.from({ length: 5 }, (_, c) => {
-                const letter =
-                  guess?.word[c]?.toUpperCase() ?? (active ? input[c] : "");
-                return (
-                  <span
-                    role="cell"
-                    className={`tile ${guess ? `${r >= initialCount.current ? "revealed" : ""} ${guess.marks[c]}` : letter ? "typed" : ""} ${active ? "current-cell" : ""}`}
-                    key={c}
-                    style={{ "--cell": c } as React.CSSProperties}
-                    aria-label={
-                      guess
-                        ? `${letter}: ${guess.marks[c] === "correct" ? "correct position" : guess.marks[c] === "present" ? "wrong position" : "absent"}`
-                        : letter || "empty"
-                    }
-                  >
-                    {letter}
-                  </span>
-                );
-              })}
-            </div>
-          );
-        })}
-      </div>
-      <span
-        id={feedbackId}
-        className="sr-only guess-feedback"
-        role="status"
-        aria-live="polite"
-        aria-atomic="true"
-      >
-        <span key={rejectionSequence}>{rejection}</span>
-      </span>
-      {playable && (
-        <form
-          className="mobile-word-entry"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void submit();
+        <div
+          className="word-board"
+          role="table"
+          aria-label="Your word board"
+          onClick={() => {
+            if (playable && window.matchMedia("(min-width: 601px)").matches)
+              inputRef.current?.focus();
           }}
         >
-          <label className="sr-only" htmlFor="word-input">
-            Type your five-letter guess
-          </label>
+          {Array.from({ length: 6 }, (_, row) => {
+            const guess = guesses[row],
+              active = row === guesses.length && playable;
+            return (
+              <div
+                key={row}
+                ref={active ? activeRow : undefined}
+                role="row"
+                className={`tile-row ${active ? "current-row" : ""} ${active && rejection ? "rejected-row" : ""} ${row >= initialCount.current && guess?.marks.every((mark) => mark === "correct") ? "winning-row" : ""}`}
+                aria-label={`Guess ${row + 1}${guess ? `: ${guess.word.toUpperCase()}` : active ? ": current guess" : ": empty"}`}
+              >
+                {Array.from({ length: 5 }, (_, col) => {
+                  const letter =
+                    guess?.word[col]?.toUpperCase() ??
+                    (active ? input[col] : "");
+                  return (
+                    <span
+                      key={col}
+                      role="cell"
+                      className={`tile ${guess ? `${row >= initialCount.current ? "revealed" : ""} ${guess.marks[col]}` : letter ? "typed" : ""} ${active ? "current-cell" : ""}`}
+                      style={{ "--cell": col } as React.CSSProperties}
+                      aria-label={
+                        guess
+                          ? `${letter}: ${guess.marks[col] === "correct" ? "correct position" : guess.marks[col] === "present" ? "wrong position" : "absent"}`
+                          : letter || "empty"
+                      }
+                    >
+                      {letter}
+                    </span>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+        {playable && (
           <input
-            id="word-input"
+            className="grid-input"
+            aria-label="Type your five-letter guess"
             ref={inputRef}
             value={input}
             disabled={busy}
             aria-invalid={!!rejection}
             aria-describedby={rejection ? feedbackId : undefined}
-            onChange={(e) => {
+            onFocus={(event) =>
+              event.currentTarget.setSelectionRange(input.length, input.length)
+            }
+            onKeyDown={(event) => {
+              if (event.ctrlKey || event.metaKey || event.altKey) return;
+              if (
+                /^[a-z]$/i.test(event.key) ||
+                ["Enter", "Backspace"].includes(event.key)
+              ) {
+                event.preventDefault();
+                keypress(event.key.toUpperCase());
+              }
+            }}
+            onChange={(event) => {
               setInput(
-                e.target.value
+                event.target.value
                   .replace(/[^a-z]/gi, "")
                   .toUpperCase()
                   .slice(0, 5),
@@ -220,54 +234,78 @@ export function WordPlay({ guesses, playable, busy, onGuess, onError }: Props) {
             autoCorrect="off"
             spellCheck={false}
             maxLength={5}
-            inputMode="text"
-            placeholder="Type a word or use the keys below"
           />
-          <button type="submit" disabled={busy} aria-label="Submit guess">
-            {busy ? (
-              <LoaderCircle size={18} className="spinner" />
-            ) : (
-              <ArrowRight size={18} />
-            )}
-          </button>
-        </form>
+        )}
+      </form>
+      <span
+        id={feedbackId}
+        className="sr-only guess-feedback"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <span key={rejectionSequence}>{rejection}</span>
+      </span>
+      {showKeyboard && (
+        <VirtualKeyboard
+          letters={keyboard}
+          disabled={!playable || busy}
+          onKey={keypress}
+        />
       )}
-      <div className="keyboard" role="group" aria-label="On-screen keyboard">
-        {["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"].map((row, r) => (
-          <div className="keyboard-row" key={row}>
-            {r === 2 && (
-              <button
-                className="key wide-key"
-                disabled={!playable || busy}
-                onClick={() => keypress("ENTER")}
-              >
-                ENTER
-              </button>
-            )}
-            {row.split("").map((k) => (
-              <button
-                className={`key ${keyboard[k] ?? ""}`}
-                key={k}
-                disabled={!playable || busy}
-                aria-label={`${k}${keyboard[k] ? `, ${keyboard[k]}` : ""}`}
-                onClick={() => keypress(k)}
-              >
-                {k}
-              </button>
-            ))}
-            {r === 2 && (
-              <button
-                className="key wide-key"
-                aria-label="Delete letter"
-                disabled={!playable || busy}
-                onClick={() => keypress("BACKSPACE")}
-              >
-                <Delete size={20} />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
     </>
+  );
+}
+
+export function VirtualKeyboard({
+  letters,
+  disabled,
+  onKey,
+}: {
+  letters: Record<string, Mark>;
+  disabled: boolean;
+  onKey: (key: string) => void;
+}) {
+  return (
+    <div className="keyboard" role="group" aria-label="On-screen keyboard">
+      {["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"].map((row, index) => (
+        <div className="keyboard-row" key={row}>
+          {index === 2 && (
+            <button
+              className="key wide-key"
+              aria-label="Submit guess"
+              disabled={disabled}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => onKey("ENTER")}
+            >
+              Enter
+            </button>
+          )}
+          {row.split("").map((key) => (
+            <button
+              key={key}
+              className={`key ${letters[key] ?? ""}`}
+              disabled={disabled}
+              aria-label={`${key}${letters[key] ? `, ${letters[key]}` : ""}`}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => onKey(key)}
+            >
+              {key}
+            </button>
+          ))}
+          {index === 2 && (
+            <button
+              className="key wide-key"
+              aria-label="Delete letter"
+              disabled={disabled}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => onKey("BACKSPACE")}
+            >
+              <Delete size={19} />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

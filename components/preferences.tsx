@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Settings2, Volume2, Vibrate } from "lucide-react";
 import { Modal } from "./shared";
 type Preferences = { sound: boolean; haptics: boolean };
@@ -59,7 +59,7 @@ export function feedback(kind: "guess" | "win" | "error") {
     oscillator.stop(start + 0.15);
   });
 }
-export function PreferencesButton() {
+export function PreferencesButton({ children }: { children?: ReactNode }) {
   const [open, setOpen] = useState(false),
     [prefs, setPrefs] = useState(defaults),
     [haptics, setHaptics] = useState(false);
@@ -85,19 +85,17 @@ export function PreferencesButton() {
   return (
     <>
       <button
-        className="text-button preferences-button"
+        className="nav-action preferences-button"
+        title="Settings"
         aria-label="Game settings"
         onClick={() => setOpen(true)}
       >
         <Settings2 size={18} />
-        <span>Settings</span>
+        <span className="nav-label">Settings</span>
       </button>
       {open && (
-        <Modal title="A little feedback." close={() => setOpen(false)}>
-          <p className="form-intro">
-            Make the game sound and feel the way you like. Both are off until
-            you choose.
-          </p>
+        <Modal title="Settings" close={() => setOpen(false)}>
+          {children}
           <label className="preference-row">
             <Volume2 size={21} />
             <span>
@@ -130,8 +128,7 @@ export function PreferencesButton() {
             />
           </label>
           <p className="settings-note">
-            Motion follows your device’s reduced motion setting. Preferences are
-            saved in this browser.
+            Motion follows your device’s reduced-motion setting.
           </p>
           <button
             className="button secondary full"

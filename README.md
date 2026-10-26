@@ -5,7 +5,7 @@ Play at **[wordle-rally.vercel.app](https://wordle-rally.vercel.app)**.
 ## How to play
 
 1. Choose **Create a room**, enter your player name, and select the game mode, player count, rounds, difficulty, and scoring. Pick a round timer or **No time limit**.
-2. Share the room code or invite link. Friends can enter the code through **Join a room**.
+2. Share the room code or invite link. Friends can enter the code through **Join with code**.
 3. Once everyone has joined, the host starts the match. Each player gets six attempts to solve the same five-letter word per round.
 4. Use the tile feedback: **green** means the correct letter in the correct position, **gold** means the letter belongs elsewhere, and **gray** means it is absent.
 5. Solving earns points. **Classic** awards one point per solve. **Guess bonus** awards 6, 5, 4, 3, 2, or 1 point according to the attempt that solves the word. Unsolved words earn zero points. Using all six attempts ends your turn while the others keep playing.

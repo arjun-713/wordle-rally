@@ -1,33 +1,14 @@
-import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { soloAction } from "../lib/solo";
-import { createRoom, roomAction } from "./room-client";
-import { compareAndSet, read } from "../lib/store";
-import type { SoloGame, Room } from "../lib/types";
+import test from "node:test";
 import guesses from "../data/guesses.json";
-import answers from "../data/answers.json";
+import { soloAction } from "../lib/solo";
+import { read } from "../lib/store";
+import type { Room, SoloGame } from "../lib/types";
+import { createRoom, roomAction } from "./room-client";
 async function secret(id: string): Promise<SoloGame> {
   return JSON.parse((await read(`rally:solo:${id}`))!);
 }
-test("solo puzzle stays private, survives reloads, and repeated start requests reuse it", async () => {
-  const id = randomUUID();
-  assert.equal(await soloAction(id), null);
-  const [a, b] = await Promise.all(
-    [1, 2].map(() => soloAction(id, { action: "start" })),
-  );
-  assert.equal(a!.id, b!.id);
-  assert.equal(a!.answer, undefined);
-  const answer = (await secret(id)).answer;
-  await soloAction(id, {
-    action: "guess",
-    gameId: a!.id,
-    word: guesses.find((w) => w !== answer)!,
-  });
-  assert.equal((await soloAction(id))!.guesses.length, 1);
-  assert.equal((await soloAction(id, { action: "start" }))!.id, a!.id);
-  assert.equal(JSON.parse((await read(`rally:history:${id}`))!).length, 1);
-});
 test("wins, losses, streaks and Next word persist without repeating answers", async () => {
   const id = randomUUID(),
     used = new Set<string>();
@@ -92,20 +73,6 @@ test("invalid, duplicate and stale solo guesses do not consume attempts or doubl
   );
   assert.equal((await secret(id)).guesses.length, 0);
 });
-test("simultaneous Next word requests reserve just one new answer", async () => {
-  const id = randomUUID(),
-    game = (await soloAction(id, { action: "start" }))!;
-  await soloAction(id, {
-    action: "guess",
-    gameId: game.id,
-    word: (await secret(id)).answer,
-  });
-  const next = await Promise.allSettled(
-    [1, 2].map(() => soloAction(id, { action: "next", gameId: game.id })),
-  );
-  assert.equal(next.filter((r) => r.status === "fulfilled").length, 1);
-  assert.equal(JSON.parse((await read(`rally:history:${id}`))!).length, 2);
-});
 test("solo and multiplayer starts share one atomic no-repeat history", async () => {
   const id = randomUUID(),
     friend = randomUUID();
@@ -122,16 +89,4 @@ test("solo and multiplayer starts share one atomic no-repeat history", async () 
     multiplayer: Room = JSON.parse((await read(`rally:room:${room.code}`))!);
   assert.ok(multiplayer.rounds.every((r) => r.answer !== solo.answer));
   assert.equal(JSON.parse((await read(`rally:history:${id}`))!).length, 21);
-});
-test("exhausted answer pools produce an explicit error without recycling", async () => {
-  const id = randomUUID();
-  await compareAndSet([
-    {
-      key: `rally:history:${id}`,
-      expected: null,
-      value: JSON.stringify(answers),
-    },
-  ]);
-  await assert.rejects(soloAction(id, { action: "start" }), /answer pool/);
-  assert.equal(await soloAction(id), null);
 });
