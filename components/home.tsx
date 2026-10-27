@@ -3,8 +3,9 @@ import { useEffect, useState } from "react";
 import { ArrowRight, ArrowUpRight, CircleHelp, Hash, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MODES, type Config, type Mode, type PublicRoom } from "@/lib/types";
+import { type Config, type PublicRoom } from "@/lib/types";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
+import { RoomConfigFields } from "./room-config";
 import { TopNav } from "./navigation";
 
 const preview = [
@@ -23,19 +24,19 @@ const preview = [
 ];
 export default function Home() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("duel");
+  const [config, setConfig] = useState<Config>({
+    mode: "duel",
+    players: 2,
+    rounds: 5,
+    seconds: 90,
+    scoring: "classic",
+    difficulty: "mixed",
+    matches: 1,
+  });
   const [panel, setPanel] = useState<"create" | "join" | "rules" | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [players, setPlayers] = useState(4),
-    [rounds, setRounds] = useState(5),
-    [seconds, setSeconds] = useState(90);
-  const [scoring, setScoring] = useState<"classic" | "bonus">("classic");
-  const [difficulty, setDifficulty] = useState<
-    "familiar" | "challenging" | "mixed"
-  >("mixed");
-  const [matches, setMatches] = useState(1),
-    [busy, setBusy] = useState(false),
+  const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
     setName(savedName());
@@ -55,15 +56,6 @@ export default function Home() {
     setBusy(true);
     try {
       saveName(name);
-      const config: Config = {
-        mode,
-        players: mode === "duel" ? 2 : mode === "teams" ? 4 : players,
-        rounds,
-        seconds,
-        scoring,
-        difficulty,
-        matches,
-      };
       const room =
         panel === "create"
           ? await api<PublicRoom>("/api/rooms", { name, config })
@@ -130,7 +122,7 @@ export default function Home() {
               How to play
             </button>
           </div>
-          <p className="hub-formats">1v1 · 2v2 · Free-for-all</p>
+          <p className="hub-formats">1v1 · 2v2 · Free-for-all · Fast Fingers</p>
         </section>
         <section
           className="match-preview"
@@ -228,135 +220,11 @@ export default function Home() {
                   />
                 </label>
               ) : (
-                <>
-                  <fieldset>
-                    <legend>Game mode</legend>
-                    <div className="segmented">
-                      {(Object.keys(MODES) as Mode[]).map((key) => (
-                        <button
-                          key={key}
-                          type="button"
-                          aria-pressed={mode === key}
-                          onClick={() => setMode(key)}
-                        >
-                          {MODES[key].label}
-                        </button>
-                      ))}
-                    </div>
-                  </fieldset>
-                  <div className="form-grid">
-                    <label>
-                      Number of players
-                      <select
-                        value={
-                          mode === "duel" ? 2 : mode === "teams" ? 4 : players
-                        }
-                        disabled={mode !== "free"}
-                        onChange={(event) =>
-                          setPlayers(Number(event.target.value))
-                        }
-                      >
-                        {Array.from({ length: 15 }, (_, index) => (
-                          <option key={index} value={index + 2}>
-                            {index + 2} players
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Number of rounds
-                      <select
-                        value={rounds}
-                        onChange={(event) =>
-                          setRounds(Number(event.target.value))
-                        }
-                      >
-                        {Array.from({ length: 20 }, (_, index) => (
-                          <option key={index} value={index + 1}>
-                            {index + 1}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="form-grid">
-                    <label>
-                      Time per round
-                      <select
-                        value={seconds}
-                        onChange={(event) =>
-                          setSeconds(Number(event.target.value))
-                        }
-                      >
-                        {[0, 30, 60, 90, 120, 180, 300].map((value) => (
-                          <option key={value} value={value}>
-                            {value === 0 ? "No time limit" : `${value} seconds`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Scoring
-                      <select
-                        value={scoring}
-                        onChange={(event) =>
-                          setScoring(event.target.value as typeof scoring)
-                        }
-                      >
-                        <option value="classic">Classic · 1 point</option>
-                        <option value="bonus">Guess bonus · 6–1 points</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="form-grid">
-                    <label>
-                      Word difficulty
-                      <select
-                        value={difficulty}
-                        onChange={(event) =>
-                          setDifficulty(event.target.value as typeof difficulty)
-                        }
-                      >
-                        <option value="familiar">Familiar</option>
-                        <option value="challenging">Challenging</option>
-                        <option value="mixed">Random mix</option>
-                      </select>
-                    </label>
-                    <label>
-                      Match format
-                      <select
-                        value={matches === 1 ? "single" : "championship"}
-                        onChange={(event) =>
-                          setMatches(event.target.value === "single" ? 1 : 3)
-                        }
-                      >
-                        <option value="single">Single match</option>
-                        <option value="championship">Championship</option>
-                      </select>
-                    </label>
-                  </div>
-                  {matches > 1 && (
-                    <label>
-                      Number of matches
-                      <select
-                        value={matches}
-                        onChange={(event) =>
-                          setMatches(Number(event.target.value))
-                        }
-                      >
-                        {Array.from({ length: 9 }, (_, index) => (
-                          <option key={index} value={index + 2}>
-                            {index + 2}
-                          </option>
-                        ))}
-                      </select>
-                      <small>
-                        Points carry across matches. Tied leaders share the
-                        title.
-                      </small>
-                    </label>
-                  )}
-                </>
+                <RoomConfigFields
+                  value={config}
+                  onChange={setConfig}
+                  disabled={busy}
+                />
               )}
               {error && (
                 <p className="error-message" role="alert">

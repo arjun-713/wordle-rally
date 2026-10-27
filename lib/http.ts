@@ -1,3 +1,4 @@
+import { reportSlowRequest, timedRequest, serverTiming } from "./timing";
 import { cookies } from "next/headers";
 import { createHash, randomBytes } from "node:crypto";
 import { NextResponse } from "next/server";
@@ -84,9 +85,17 @@ export async function body(request: Request): Promise<Record<string, unknown>> {
   return parsed;
 }
 export async function respond(work: () => Promise<unknown>) {
+  return timedRequest(() =>
+    reply(work).finally(() => reportSlowRequest("API")),
+  );
+}
+async function reply(work: () => Promise<unknown>) {
   try {
     return NextResponse.json(await work(), {
-      headers: { "Cache-Control": "private, no-store" },
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Server-Timing": serverTiming(),
+      },
     });
   } catch (error) {
     if (!(error instanceof GameError))
@@ -106,7 +115,10 @@ export async function respond(work: () => Promise<unknown>) {
       },
       {
         status: error instanceof GameError ? error.status : 503,
-        headers: { "Cache-Control": "no-store" },
+        headers: {
+          "Cache-Control": "no-store",
+          "Server-Timing": serverTiming(),
+        },
       },
     );
   }

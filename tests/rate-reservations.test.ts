@@ -81,3 +81,21 @@ test("the actual storage limiter allows exactly its configured number of concurr
   assert.equal(results.filter((r) => r.status === "fulfilled").length, 100);
   results.filter((r) => r.status === "rejected").forEach(denied);
 });
+
+test("prefetch hides the next reservation without consuming a slot or exceeding its shared cap", async () => {
+  const db = backend(),
+    limiter = new ReservationLimiter(db.reserve, () => 0);
+  for (let i = 0; i < 3; i++) await limiter.take("prefetch", "actions", 9);
+  await limiter.prefetch("prefetch", "actions", 9);
+  assert.equal(db.calls(), 2);
+  // Three spent slots plus the six remaining permissible requests.
+  const next = await Promise.allSettled(
+    Array.from({ length: 8 }, () => limiter.take("prefetch", "actions", 9)),
+  );
+  assert.equal(
+    next.filter((result) => result.status === "fulfilled").length,
+    6,
+  );
+  await limiter.prefetch("prefetch", "actions", 9);
+  await assert.rejects(limiter.take("prefetch", "actions", 9), GameError);
+});

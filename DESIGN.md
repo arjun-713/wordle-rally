@@ -44,3 +44,7 @@ Native dialogs retain focus trapping, Escape, backdrop dismissal and return focu
 
 Supported: duel, 2v2, 2–16 free-for-all; classic/bonus; 1–20 rounds; optional timers; three difficulty pools with 14,877 answers (14,511 available to random games after reserving Daily); championships; Daily; Unlimited; persisted names/history/stats; sound and supported-device haptics.
 Not implemented: live online presence, player-ready acknowledgements, countdown, accounts, theme/contrast settings, spectators or team chat. Joined players are labelled Joined. Only the host starts/advances rooms. Prototype-like data is confined to the labelled homepage illustration.
+
+## Fast Fingers
+
+Reuse the play shell. A compact progress/elapsed strip and horizontally scrolling numbered word selector sit above the board. Solved words use a check, wasted words use a cross, current words use ink; labels also announce state. Skip/Next and keyboard arrows navigate locally. Submitted guesses and local drafts remain attached to their word. Final results show both 50-point contributions, precise completion time, and incomplete runs without a rank. Scoring explanation stays collapsed. The shared two-by-two mode picker is used for creation and host lobby edits. No permanent statistics rail or result-copy action.

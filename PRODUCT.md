@@ -51,3 +51,11 @@ The product is branded Wordrally. Initial capacity limit is 16 players per room;
 Editorial Arcade: warm paper, ink, lime actions, tactile tiles and Manrope. Home is a compact play hub; gameplay is a vertically centred board and keyboard with no permanent legend, sidebar or storage notices. Help contains the colour legend. Create/Join are native dialogs; invites and route deep links remain real. Multiplayer shows scores, server deadlines and private attempt counts, with results and breakdowns after completion.
 
 The backend implements every advertised game format. It does not implement online presence, separate player readiness, countdowns, account linking or theme/contrast preferences; the UI does not invent those states. Network failures show reconnecting separately from an explicit departure.
+
+## Fast Fingers and editable lobbies
+
+- Fast Fingers supports 2–16 players and 1–20 shared words in one race. Two players give a 1v1 race; larger rooms are a free-for-all. It uses bonus scoring and an elapsed clock, with no fixed deadline or championship format.
+- Each player chooses words independently. Skipping spends no attempt and submitted guesses survive navigation/reload. A numbered navigator and Skip/Next control provide instant local navigation.
+- A completed run requires every word solved. Six failed attempts waste that word, award zero, and make the run ineligible for a finishing rank and speed points. The race ends when everyone remaining has solved or exhausted their words. Leaving does not erase an already completed run.
+- Points contribute 50 × bonus points / (6 × words). Speed contributes 50 × average complete-run time / (average complete-run time + personal complete-run time). Both contributions are rounded to one decimal and added; tied totals share the win. Incomplete runs show no total/rank. Official completion timestamps come from the server.
+- Before the first match starts, the host may edit mode, capacity, rounds/words, timing, scoring, difficulty and match format. Updates keep the code and joined players. Capacity cannot shrink below occupied seats; stale edits and changes after start are rejected. Later championship lobbies remain locked.

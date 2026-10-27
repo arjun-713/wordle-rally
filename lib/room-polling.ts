@@ -22,7 +22,28 @@ export function roomPollDelay(
     if (room.host === room.me) return null;
     return quietFor >= 120000 ? 30000 : quietFor >= 30000 ? 15000 : 5000;
   }
+  const liveRound =
+    room.status === "playing" && !!room.current && !room.current.ended;
   let delay = room.current?.ended ? 3000 : quietFor >= 45000 ? 15000 : 5000;
+  // Ghost boards show rivals' rows, so a live round polls faster until it has
+  // been quiet for two minutes (rivals likely idle or away).
+  if (liveRound && room.config.mode !== "race")
+    delay = quietFor >= 120000 ? 6000 : 3000;
+  // Fast Fingers closes a minute after the first complete run; wake right
+  // after that cutoff so results appear without waiting out a slow poll.
+  const firstFinish = room.race?.standings.reduce<number | null>(
+    (min, p) =>
+      p.elapsed === null ? min : Math.min(min ?? p.elapsed, p.elapsed),
+    null,
+  );
+  if (room.status === "playing" && room.race && firstFinish != null)
+    delay = Math.min(
+      delay,
+      Math.max(
+        150,
+        room.race.startedAt + firstFinish + 60000 - serverNow + 150,
+      ),
+    );
   if (
     room.status === "playing" &&
     room.config.seconds !== 0 &&

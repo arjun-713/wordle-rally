@@ -33,6 +33,31 @@ export class ReservationLimiter {
     return granted;
   }
 
+  async prefetch(identity: string, bucket: string, maximum: number) {
+    const minute = Math.floor(this.clock() / 60000);
+    const key = `rally:rate:${identity}:${bucket}:${minute}`;
+    const entry = this.allowances.get(`${key}:${maximum}`);
+    // Only top up an existing low allowance. Background work cannot create an
+    // identity, spend a slot, bypass a denial, or renew an expired minute.
+    if (
+      !entry ||
+      entry.remaining > 1 ||
+      entry.denied ||
+      entry.pending ||
+      entry.expires <= this.clock()
+    )
+      return;
+    entry.pending = this.allocate(key, 4, maximum)
+      .then((granted) => {
+        entry.remaining += granted;
+        entry.denied = granted === 0;
+      })
+      .finally(() => {
+        entry.pending = undefined;
+      });
+    await entry.pending;
+  }
+
   async take(identity: string, bucket: string, maximum: number) {
     for (;;) {
       const minute = Math.floor(this.clock() / 60000),

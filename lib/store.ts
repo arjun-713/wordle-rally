@@ -1,3 +1,5 @@
+import { rememberMutation, forgetMutation } from "./mutation-cache";
+import { measure } from "./timing";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -43,40 +45,63 @@ export function storageMode(): "redis" | "local" {
   }
   return "local";
 }
-async function command<T>(
-  args: (string | number)[],
-  snapshot?: { tag: string; window: number },
-): Promise<T> {
+// Upstash normally answers in tens of milliseconds. A call that stalls for
+// seconds is almost always a dead connection, and a fresh request succeeds, so
+// fail each call quickly enough that a mutation (several serial calls) still
+// answers well inside the browser's request deadline.
+const commandTimeout = () => Number(process.env.RALLY_REDIS_TIMEOUT_MS) || 3000;
+const unavailable = () =>
+  new GameError(
+    "Room storage is temporarily unavailable. Please retry.",
+    503,
+    "STORAGE_SLOW",
+  );
+class TransportError extends Error {}
+async function send<T>(args: (string | number)[]): Promise<T> {
   const credentials = redisCredentials();
   if (!credentials)
     throw new GameError("Redis storage is not configured.", 503);
-  const response = await fetch(credentials.url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${credentials.token}`,
-      "Content-Type": "application/json",
-      ...(snapshot
-        ? { "X-Rally-Snapshot-Window": String(snapshot.window) }
-        : {}),
-    },
-    body: JSON.stringify(args),
-    cache: snapshot ? "force-cache" : "no-store",
-    ...(snapshot ? { next: { revalidate: 20, tags: [snapshot.tag] } } : {}),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!response.ok)
-    throw new GameError(
-      "Room storage is temporarily unavailable. Please retry.",
-      503,
-    );
-  const json = await response.json();
-  if (json.error)
-    throw new GameError(
-      "Room storage is temporarily unavailable. Please retry.",
-      503,
-    );
-  return json.result;
+  let response: Response, json: { result?: T; error?: unknown };
+  try {
+    response = await fetch(credentials.url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${credentials.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(args),
+      cache: "no-store",
+      signal: AbortSignal.timeout(commandTimeout()),
+    });
+    if (response.status >= 500) throw new TransportError();
+    json = await response.json();
+  } catch {
+    // Timeout, reset connection, gateway error or a truncated body.
+    throw new TransportError();
+  }
+  if (!response.ok || json.error) throw unavailable();
+  return json.result as T;
 }
+// `retry` is only safe when repeating the command cannot change the outcome:
+// reads, and rate-limit bookings (a duplicate only spends the caller's own
+// allowance; it can never grant extra requests). A CAS write is never
+// repeated at this layer: it may have been applied before its reply was lost.
+async function command<T>(
+  args: (string | number)[],
+  options: { retry?: boolean } = {},
+): Promise<T> {
+  return measure("redis", async () => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await send<T>(args);
+      } catch (error) {
+        if (!(error instanceof TransportError)) throw error;
+        if (!options.retry || attempt > 0) throw unavailable();
+      }
+    }
+  });
+}
+
 async function readLocal(): Promise<Record<string, RecordValue>> {
   try {
     return JSON.parse(await readFile(file, "utf8"));
@@ -86,7 +111,7 @@ async function readLocal(): Promise<Record<string, RecordValue>> {
   }
 }
 export async function read(key: string): Promise<string | null> {
-  if (storageMode() === "redis") return command(["GET", key]);
+  if (storageMode() === "redis") return command(["GET", key], { retry: true });
   const item = (await readLocal())[key];
   return item && (!item.expires || item.expires > Date.now())
     ? item.value
@@ -94,7 +119,8 @@ export async function read(key: string): Promise<string | null> {
 }
 export async function readMany(keys: string[]): Promise<(string | null)[]> {
   if (!keys.length) return [];
-  if (storageMode() === "redis") return command(["MGET", ...keys]);
+  if (storageMode() === "redis")
+    return command(["MGET", ...keys], { retry: true });
   const data = await readLocal(),
     now = Date.now();
   return keys.map((key) => {
@@ -102,28 +128,41 @@ export async function readMany(keys: string[]): Promise<(string | null)[]> {
     return item && (!item.expires || item.expires > now) ? item.value : null;
   });
 }
-export const roomCacheTag = (code: string) => `rally-room:${code}`;
 export const roomCacheEnabled = () =>
   storageMode() === "redis" && process.env.RALLY_DISABLE_ROOM_CACHE !== "true";
-// Collapse concurrent cold-cache requests within a function instance. Only
-// in-flight work is held here; persisted snapshots live in Next's Data Cache.
+// Polls read Redis directly. (Next's Data Cache was used here before, but every
+// guess invalidated it, so it rarely hit, and its lookups were not bounded by
+// the Redis timeout: production polls occasionally hung for 15s+.) Within one
+// function instance, concurrent polls for a room share one GET, and a value
+// read or written here is reused for a second, which is far below the poll
+// interval, so it removes duplicate Redis reads without visible staleness.
+const ROOM_REUSE_MS = 1000;
 const roomReads = new Map<string, Promise<string | null>>();
-// Only the raw server snapshot is shared. User-specific responses stay private.
-// The window is part of fetch's cache key, so an old snapshot is never reused
-// beyond ten seconds, including when Redis is unavailable during revalidation.
+const recentRooms = new Map<string, { value: string | null; at: number }>();
+function rememberRoom(code: string, value: string | null) {
+  recentRooms.delete(code);
+  recentRooms.set(code, { value, at: Date.now() });
+  if (recentRooms.size > 512)
+    recentRooms.delete(recentRooms.keys().next().value!);
+}
 export function readRoomCached(
   code: string,
   now = Date.now(),
 ): Promise<string | null> {
-  const window = Math.floor(now / 10000),
-    key = `${code}:${window}`;
-  const existing = roomReads.get(key);
+  const recent = recentRooms.get(code);
+  if (recent && now - recent.at < ROOM_REUSE_MS)
+    return Promise.resolve(recent.value);
+  const existing = roomReads.get(code);
   if (existing) return existing;
   const pending = command<string | null>(["GET", `rally:room:${code}`], {
-    tag: roomCacheTag(code),
-    window,
-  }).finally(() => roomReads.delete(key));
-  roomReads.set(key, pending);
+    retry: true,
+  })
+    .then((value) => {
+      rememberRoom(code, value);
+      return value;
+    })
+    .finally(() => roomReads.delete(code));
+  roomReads.set(code, pending);
   return pending;
 }
 const casScript = `
@@ -141,7 +180,7 @@ for i,key in ipairs(KEYS) do
 end
 if #persistent > 0 then redis.call('MSET',unpack(persistent)) end
 return 1`;
-export async function compareAndSet(writes: Write[]): Promise<boolean> {
+async function commit(writes: Write[]): Promise<boolean> {
   if (!writes.length) return true;
   if (storageMode() === "redis") {
     return (
@@ -189,19 +228,61 @@ export async function compareAndSet(writes: Write[]): Promise<boolean> {
     await rm(lock, { recursive: true, force: true });
   }
 }
+export async function compareAndSet(writes: Write[]): Promise<boolean> {
+  return measure("commit", async () => {
+    let saved: boolean;
+    try {
+      saved = await commit(writes);
+    } catch (error) {
+      // An unanswered CAS may or may not have applied; drop optimistic copies.
+      for (const item of writes) {
+        forgetMutation(item.key);
+        recentRooms.delete(item.key.replace(/^rally:room:/, ""));
+      }
+      throw error;
+    }
+    for (const item of writes) {
+      if (saved) rememberMutation(item.key, item.value);
+      else forgetMutation(item.key);
+      const room = /^rally:room:(.+)$/.exec(item.key)?.[1];
+      if (room) {
+        if (saved) rememberRoom(room, item.value);
+        else recentRooms.delete(room);
+      }
+    }
+    return saved;
+  });
+}
+export async function prefetchRateLimit(
+  id: string,
+  bucket: string,
+  maximum: number,
+) {
+  if (
+    maximum < 100 ||
+    process.env.RALLY_DISABLE_RATE_RESERVATIONS === "true" ||
+    process.env.RALLY_DISABLE_RATE_PREFETCH === "true"
+  )
+    return;
+  await rateReservations.prefetch(id, bucket, maximum);
+}
+
 async function reserveRateSlots(key: string, amount: number, maximum: number) {
   if (storageMode() === "redis")
-    return command<number>([
-      "EVAL",
-      `local used=tonumber(redis.call('GET',KEYS[1]) or '0')
+    return command<number>(
+      [
+        "EVAL",
+        `local used=tonumber(redis.call('GET',KEYS[1]) or '0')
 local amount=math.min(tonumber(ARGV[1]),math.max(0,tonumber(ARGV[2])-used))
 if amount>0 then redis.call('SET',KEYS[1],used+amount,'EX',60) end
 return amount`,
-      1,
-      key,
-      amount,
-      maximum,
-    ]);
+        1,
+        key,
+        amount,
+        maximum,
+      ],
+      { retry: true },
+    );
   for (let retry = 0; retry < 8; retry++) {
     const old = await read(key),
       used = Number(old ?? 0),
@@ -218,7 +299,7 @@ return amount`,
 }
 const rateReservations = new ReservationLimiter(reserveRateSlots);
 
-export async function rateLimit(
+async function takeRateLimit(
   identity: string,
   bucket: string,
   maximum: number,
@@ -230,12 +311,15 @@ export async function rateLimit(
     return rateReservations.take(identity, bucket, maximum);
   const key = `rally:rate:${identity}:${bucket}:${Math.floor(Date.now() / 60000)}`;
   if (mode === "redis") {
-    const count = await command<number>([
-      "EVAL",
-      "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n",
-      1,
-      key,
-    ]);
+    const count = await command<number>(
+      [
+        "EVAL",
+        "local n=redis.call('INCR',KEYS[1]); if n==1 then redis.call('EXPIRE',KEYS[1],60) end; return n",
+        1,
+        key,
+      ],
+      { retry: true },
+    );
     if (count > maximum)
       throw new GameError(
         "Too many requests. Wait a minute and try again.",
@@ -259,4 +343,12 @@ export async function rateLimit(
       return;
   }
   throw new GameError("Too many simultaneous actions. Please retry.", 409);
+}
+
+export async function rateLimit(
+  identity: string,
+  bucket: string,
+  maximum: number,
+): Promise<void> {
+  return measure("limit", () => takeRateLimit(identity, bucket, maximum));
 }

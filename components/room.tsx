@@ -9,12 +9,13 @@ import {
   Link2,
   LoaderCircle,
   LogOut,
+  SlidersHorizontal,
   UserRound,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { roomPollDelay } from "@/lib/room-polling";
-import { isGuessRejection } from "@/lib/client-api";
+import { isGuessRejection, readApi, roomMutation } from "@/lib/client-api";
 import type { Player, PublicRoom, RoomSyncReply } from "@/lib/types";
 import { MODES } from "@/lib/types";
 import { pointsForGuess } from "@/lib/scoring";
@@ -24,8 +25,12 @@ import {
   tournamentTotals,
 } from "./match-results";
 import { WordPlay } from "./word-play";
+import { GhostBoard } from "./ghost-board";
+import { RacePlay } from "./race-play";
+import { RoomConfigFields } from "./room-config";
+import type { Config } from "@/lib/types";
 import { TopNav } from "./navigation";
-import { api, Modal, Rules, savedName, saveName } from "./shared";
+import { Modal, Rules, savedName, saveName } from "./shared";
 function formatTime(seconds: number) {
   return `${Math.floor(seconds / 60)
     .toString()
@@ -59,6 +64,7 @@ export default function RoomClient({ code }: { code: string }) {
   const [now, setNow] = useState(Date.now());
   const [offset, setOffset] = useState(0);
   const [copied, setCopied] = useState("");
+  const [settings, setSettings] = useState<{ config: Config } | null>(null);
   const [showRules, setShowRules] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const busyRef = useRef(false);
@@ -129,9 +135,8 @@ export default function RoomClient({ code }: { code: string }) {
       controller = new AbortController();
       const current = currentRef.current;
       try {
-        const next = await api<RoomSyncReply>(
+        const next = await readApi<RoomSyncReply>(
           `/api/rooms/${code}${current ? `?revision=${current.revision}` : ""}`,
-          undefined,
           controller.signal,
         );
         if (stopped || attempt !== epoch) return;
@@ -203,7 +208,8 @@ export default function RoomClient({ code }: { code: string }) {
     setBusy(true);
     setError("");
     try {
-      const next = await api<PublicRoom>(`/api/rooms/${code}`, data);
+      const before = currentRef.current;
+      const next = await roomMutation(code, before, data);
       apply(next);
       return next;
     } catch (e) {
@@ -230,9 +236,10 @@ export default function RoomClient({ code }: { code: string }) {
     !solved &&
     !exhausted &&
     (room.config.seconds === 0 || seconds > 0) &&
-    me?.active &&
-    !network
+    me?.active
   );
+  // A failed background poll only means rivals' progress may be stale. Guesses
+  // carry their own recovery, so the board stays playable while it reconnects.
   async function copy(link = false) {
     const value = link ? `${location.origin}/room/${code}` : code;
     try {
@@ -298,6 +305,20 @@ export default function RoomClient({ code }: { code: string }) {
           ? "No points awarded"
           : "A shared victory!";
   const rival = room?.players.find((player) => player.id !== room.me);
+  function ghostFor(player: Player, variant: "mini" | "duel" = "mini") {
+    const attempts = current?.attempts[player.id] ?? 0;
+    const won = !!current?.solved.includes(player.id);
+    return (
+      <GhostBoard
+        name={player.name}
+        rows={current?.ghosts?.[player.id] ?? []}
+        solved={won}
+        out={!won && attempts >= 6}
+        left={!player.active}
+        variant={variant}
+      />
+    );
+  }
   const fieldLeader = sorted.find((player) => player.id !== room?.me);
   const roundDone = !!current?.ended || room?.status === "finished";
   const earned =
@@ -396,7 +417,9 @@ export default function RoomClient({ code }: { code: string }) {
                       ? `Match ${(room.match ?? 0) + 1} lobby`
                       : "Your room is open"}
                   </h1>
-                  <span>{MODES[room.config.mode].label}</span>
+                  <div className="lobby-title-actions">
+                    <span>{MODES[room.config.mode].label}</span>
+                  </div>
                 </div>
                 <div className="lobby-code">
                   <span>Room code</span>
@@ -420,11 +443,16 @@ export default function RoomClient({ code }: { code: string }) {
                   </span>
                 </div>
                 <div className="lobby-rules">
-                  <span>{room.config.rounds} rounds</span>
                   <span>
-                    {room.config.seconds === 0
-                      ? "No time limit"
-                      : `${room.config.seconds}s / round`}
+                    {room.config.rounds}{" "}
+                    {room.config.mode === "race" ? "words" : "rounds"}
+                  </span>
+                  <span>
+                    {room.config.mode === "race"
+                      ? "Elapsed race clock"
+                      : room.config.seconds === 0
+                        ? "No time limit"
+                        : `${room.config.seconds}s / round`}
                   </span>
                   <span>
                     {room.config.scoring === "bonus"
@@ -434,6 +462,24 @@ export default function RoomClient({ code }: { code: string }) {
                   <span>{room.config.difficulty ?? "mixed"} words</span>
                   {championship && <span>{room.config.matches} matches</span>}
                 </div>
+                {host && (room.match ?? 0) === 0 && (
+                  <div className="lobby-settings">
+                    <button
+                      className="button secondary"
+                      onClick={() => {
+                        setError("");
+                        setSettings({ config: { ...room.config } });
+                      }}
+                    >
+                      <SlidersHorizontal size={17} />
+                      Room settings
+                    </button>
+                    <span>
+                      Change the mode, seats, rounds or timer any time before
+                      you start.
+                    </span>
+                  </div>
+                )}
                 <div className="lobby-roster-heading">
                   <h2>Players</h2>
                   <span>
@@ -556,6 +602,17 @@ export default function RoomClient({ code }: { code: string }) {
                   </details>
                 ) : null}
               </section>
+            ) : room.config.mode === "race" && room.race ? (
+              <RacePlay
+                key={room.matchId}
+                room={room}
+                busy={busy}
+                network={network}
+                blocked={showRules || confirmLeave}
+                onAction={action}
+                onError={setError}
+                onHelp={() => setShowRules(true)}
+              />
             ) : (
               <section className="game-stage" aria-label="Multiplayer round">
                 <div className="game-context">
@@ -637,25 +694,25 @@ export default function RoomClient({ code }: { code: string }) {
                   </div>
                 </div>
                 <div
-                  className="round-progress"
+                  className={`round-progress ${room.config.mode === "duel" ? "duel-progress" : ""}`}
                   role="region"
                   tabIndex={0}
                   aria-label="Round progress"
                 >
-                  {room.players.map((player) => (
-                    <span key={player.id}>
-                      <strong>
-                        {player.id === room.me ? "You" : player.name}
-                      </strong>
-                      <span>
-                        {!player.active
-                          ? "Left"
-                          : current?.solved.includes(player.id)
+                  {room.players.map((player) =>
+                    player.id === room.me ? (
+                      <span key={player.id}>
+                        <strong>You</strong>
+                        <span>
+                          {current?.solved.includes(player.id)
                             ? "Solved"
                             : `${current?.attempts[player.id] ?? 0}/6`}
+                        </span>
                       </span>
-                    </span>
-                  ))}
+                    ) : (
+                      <span key={player.id}>{ghostFor(player)}</span>
+                    ),
+                  )}
                 </div>
                 <div className="game-status" role="status" aria-live="polite">
                   {room.status === "finished" ? (
@@ -685,6 +742,11 @@ export default function RoomClient({ code }: { code: string }) {
                   busy={busy}
                   showKeyboard={!roundDone}
                   onError={setError}
+                  aside={
+                    room.config.mode === "duel" && rival
+                      ? ghostFor(rival, "duel")
+                      : undefined
+                  }
                   onGuess={async (word) =>
                     !!(await action({
                       action: "guess",
@@ -804,6 +866,39 @@ export default function RoomClient({ code }: { code: string }) {
           </>
         )}
       </main>
+      {settings && (
+        <Modal
+          title="Room settings"
+          wide
+          close={() => !busy && setSettings(null)}
+        >
+          <form
+            className="setup-form"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const updated = await action({
+                action: "configure",
+                config: settings.config,
+              });
+              if (updated) setSettings(null);
+            }}
+          >
+            <RoomConfigFields
+              value={settings.config}
+              onChange={(config) => setSettings({ config })}
+              disabled={busy}
+            />
+            {error && (
+              <p className="error-message" role="alert">
+                {error}
+              </p>
+            )}
+            <button className="button primary full" disabled={busy}>
+              {busy ? "Saving…" : "Save settings"}
+            </button>
+          </form>
+        </Modal>
+      )}
       {showRules && (
         <Modal title="How to play" close={() => setShowRules(false)}>
           <Rules />

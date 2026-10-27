@@ -22,7 +22,7 @@ export function requireGame(
 export function validateConfig(input: unknown): Config {
   const c = input as Config | undefined;
   requireGame(
-    c && ["duel", "teams", "free"].includes(c.mode),
+    c && ["duel", "teams", "free", "race"].includes(c.mode),
     "Choose a valid game mode.",
   );
   requireGame(
@@ -59,7 +59,22 @@ export function validateConfig(input: unknown): Config {
       (Number.isInteger(c.matches) && c.matches >= 1 && c.matches <= 10),
     "Choose between 1 and 10 matches.",
   );
+  if (c.mode === "race") {
+    requireGame(
+      c.seconds === 0,
+      "Fast Fingers uses an elapsed race clock, not a round timer.",
+    );
+    requireGame(
+      c.matches === undefined || c.matches === 1,
+      "Fast Fingers is a single race.",
+    );
+    requireGame(
+      c.scoring === undefined || c.scoring === "bonus",
+      "Fast Fingers uses Guess bonus scoring.",
+    );
+  }
   return {
+    ...(c.mode === "race" ? { scoring: "bonus" as const } : {}),
     ...(c.scoring ? { scoring: c.scoring } : {}),
     ...(c.difficulty ? { difficulty: c.difficulty } : {}),
     ...(c.matches ? { matches: c.matches } : {}),
@@ -101,16 +116,23 @@ export function selectWords(
   excluded: Set<string>,
   count: number,
 ): string[] {
-  const available = pool.filter((w) => !excluded.has(w));
+  const words = [...new Set(pool)];
   requireGame(
-    available.length >= count,
-    "This group has used the available answer pool. Try fewer rounds or expand the curated dictionary.",
+    words.length >= count,
+    "This answer pool is too small for that many rounds. Try fewer rounds.",
   );
-  for (let i = 0; i < count; i++) {
-    const j = randomInt(i, available.length);
-    [available[i], available[j]] = [available[j], available[i]];
-  }
-  return available.slice(0, count);
+  // Prefer unused words; once history covers the pool, fill from used words.
+  const shuffle = (list: string[], take: number) => {
+    for (let i = 0; i < take; i++) {
+      const j = randomInt(i, list.length);
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list.slice(0, take);
+  };
+  const fresh = words.filter((w) => !excluded.has(w));
+  if (fresh.length >= count) return shuffle(fresh, count);
+  const used = words.filter((w) => excluded.has(w));
+  return [...fresh, ...shuffle(used, count - fresh.length)];
 }
 export function settle(room: Room, now: number): void {
   if (room.status !== "playing") return;

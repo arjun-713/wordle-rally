@@ -1,6 +1,6 @@
 export type Difficulty = "familiar" | "challenging" | "mixed";
 export type Scoring = "classic" | "bonus";
-export type Mode = "duel" | "teams" | "free";
+export type Mode = "duel" | "teams" | "free" | "race";
 export type Mark = "correct" | "present" | "absent";
 export type Config = {
   mode: Mode;
@@ -65,7 +65,36 @@ export type MatchResult = {
   scores: { id: string; name: string; team: number; score: number }[];
   rounds: RoundResult[];
 };
+export type RaceStanding = {
+  id: string;
+  name: string;
+  points: number;
+  solved: number;
+  resolved: boolean;
+  elapsed: number | null;
+  pointsScore: number;
+  speedScore: number;
+  total: number | null;
+};
+export type PublicRace = {
+  startedAt: number;
+  endedAt?: number;
+  average: number | null;
+  words: {
+    guesses: Guess[];
+    solved: boolean;
+    exhausted: boolean;
+    answer?: string;
+  }[];
+  standings: RaceStanding[];
+};
 export type Room = {
+  race?: {
+    startedAt: number;
+    finishedAt: Record<string, number>;
+    endedAt?: number;
+  };
+
   matchId?: string;
   match?: number;
   matches?: MatchResult[];
@@ -79,7 +108,8 @@ export type Room = {
   createdAt: number;
   revision: number;
 };
-export type PublicRoom = Omit<Room, "rounds"> & {
+export type PublicRoom = Omit<Room, "rounds" | "race"> & {
+  race?: PublicRace;
   me: string;
   serverTime: number;
   storage: "local" | "redis";
@@ -90,6 +120,8 @@ export type PublicRoom = Omit<Room, "rounds"> & {
     endsAt: number;
     ended: boolean;
     answer?: string;
+    // Other players' rows for the current round; `word` appears only after it ends.
+    ghosts?: Record<string, { marks: Mark[]; word?: string }[]>;
   } | null;
   results: RoundResult[];
 };
@@ -97,6 +129,12 @@ export const MODES: Record<
   Mode,
   { title: string; label: string; description: string }
 > = {
+  race: {
+    title: "Fast Fingers",
+    label: "Fast Fingers",
+    description:
+      "Solve the set. Skip and return. Points and speed split 50/50.",
+  },
   duel: {
     title: "The duel",
     label: "1 vs 1",

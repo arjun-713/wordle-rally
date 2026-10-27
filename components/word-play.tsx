@@ -1,17 +1,24 @@
 "use client";
 import { useEffect, useId, useRef, useState } from "react";
+import acceptedWords from "@/data/guesses.json";
 import { Delete } from "lucide-react";
 import { isGuessRejection } from "@/lib/client-api";
 import { feedback, unlockFeedback } from "./preferences";
 import type { Guess, Mark } from "@/lib/types";
+
+const validWords = new Set(acceptedWords);
 
 type Props = {
   guesses: Guess[];
   playable: boolean;
   busy: boolean;
   showKeyboard?: boolean;
+  initialInput?: string;
+  onDraftChange?: (input: string) => void;
   onGuess: (word: string) => Promise<boolean>;
   onError: (message: string) => void;
+  // Optional content shown beside the board (e.g. a rival's ghost board).
+  aside?: React.ReactNode;
 };
 export function WordPlay({
   guesses,
@@ -20,8 +27,12 @@ export function WordPlay({
   onGuess,
   onError,
   showKeyboard = true,
+  initialInput = "",
+  onDraftChange,
+  aside,
 }: Props) {
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialInput);
+  const acknowledged = useRef(guesses.length);
   const initialCount = useRef(guesses.length);
   const [rejection, setRejection] = useState("");
   const [rejectionSequence, setRejectionSequence] = useState(0);
@@ -31,10 +42,16 @@ export function WordPlay({
   const inputRef = useRef<HTMLInputElement>(null);
   const sending = useRef(false);
   useEffect(() => {
-    setInput("");
-    setRejection("");
-    wiggle.current?.cancel();
+    if (acknowledged.current !== guesses.length) {
+      setInput("");
+      setRejection("");
+      wiggle.current?.cancel();
+    }
+    acknowledged.current = guesses.length;
   }, [guesses.length]);
+  useEffect(() => {
+    onDraftChange?.(input);
+  }, [input]);
   useEffect(() => () => wiggle.current?.cancel(), []);
   const previousCount = useRef(guesses.length);
   useEffect(() => {
@@ -70,6 +87,17 @@ export function WordPlay({
     unlockFeedback();
     if (input.length !== 5) {
       reject("Enter a five-letter word.");
+      return;
+    }
+    const word = input.toLowerCase();
+    if (!validWords.has(word)) {
+      reject(
+        "That word is not in the dictionary. Try another five-letter word.",
+      );
+      return;
+    }
+    if (guesses.some((guess) => guess.word === word)) {
+      reject("You already tried that word.");
       return;
     }
     sending.current = true;
@@ -143,100 +171,109 @@ export function WordPlay({
       if (!keyboard[k] || order[guess.marks[i]] > order[keyboard[k]])
         keyboard[k] = guess.marks[i];
     });
+  const board = (
+    <form
+      className="word-grid-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
+      style={{ "--active-row": guesses.length } as React.CSSProperties}
+    >
+      <div
+        className="word-board"
+        role="table"
+        aria-label="Your word board"
+        onClick={() => {
+          if (playable && window.matchMedia("(min-width: 601px)").matches)
+            inputRef.current?.focus();
+        }}
+      >
+        {Array.from({ length: 6 }, (_, row) => {
+          const guess = guesses[row],
+            active = row === guesses.length && playable;
+          return (
+            <div
+              key={row}
+              ref={active ? activeRow : undefined}
+              role="row"
+              className={`tile-row ${active ? "current-row" : ""} ${active && rejection ? "rejected-row" : ""} ${row >= initialCount.current && guess?.marks.every((mark) => mark === "correct") ? "winning-row" : ""}`}
+              aria-label={`Guess ${row + 1}${guess ? `: ${guess.word.toUpperCase()}` : active ? ": current guess" : ": empty"}`}
+            >
+              {Array.from({ length: 5 }, (_, col) => {
+                const letter =
+                  guess?.word[col]?.toUpperCase() ?? (active ? input[col] : "");
+                return (
+                  <span
+                    key={col}
+                    role="cell"
+                    className={`tile ${guess ? `${row >= initialCount.current ? "revealed" : ""} ${guess.marks[col]}` : letter ? "typed" : ""} ${active ? "current-cell" : ""}`}
+                    style={{ "--cell": col } as React.CSSProperties}
+                    aria-label={
+                      guess
+                        ? `${letter}: ${guess.marks[col] === "correct" ? "correct position" : guess.marks[col] === "present" ? "wrong position" : "absent"}`
+                        : letter || "empty"
+                    }
+                  >
+                    {letter}
+                  </span>
+                );
+              })}
+            </div>
+          );
+        })}
+      </div>
+      {playable && (
+        <input
+          className="grid-input"
+          aria-label="Type your five-letter guess"
+          ref={inputRef}
+          value={input}
+          disabled={busy}
+          aria-invalid={!!rejection}
+          aria-describedby={rejection ? feedbackId : undefined}
+          onFocus={(event) =>
+            event.currentTarget.setSelectionRange(input.length, input.length)
+          }
+          onKeyDown={(event) => {
+            if (event.ctrlKey || event.metaKey || event.altKey) return;
+            if (
+              /^[a-z]$/i.test(event.key) ||
+              ["Enter", "Backspace"].includes(event.key)
+            ) {
+              event.preventDefault();
+              keypress(event.key.toUpperCase());
+            }
+          }}
+          onChange={(event) => {
+            setInput(
+              event.target.value
+                .replace(/[^a-z]/gi, "")
+                .toUpperCase()
+                .slice(0, 5),
+            );
+            setError("");
+            clearRejection();
+          }}
+          autoCapitalize="characters"
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+          maxLength={5}
+        />
+      )}
+    </form>
+  );
   return (
     <>
-      <form
-        className="word-grid-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-        style={{ "--active-row": guesses.length } as React.CSSProperties}
-      >
-        <div
-          className="word-board"
-          role="table"
-          aria-label="Your word board"
-          onClick={() => {
-            if (playable && window.matchMedia("(min-width: 601px)").matches)
-              inputRef.current?.focus();
-          }}
-        >
-          {Array.from({ length: 6 }, (_, row) => {
-            const guess = guesses[row],
-              active = row === guesses.length && playable;
-            return (
-              <div
-                key={row}
-                ref={active ? activeRow : undefined}
-                role="row"
-                className={`tile-row ${active ? "current-row" : ""} ${active && rejection ? "rejected-row" : ""} ${row >= initialCount.current && guess?.marks.every((mark) => mark === "correct") ? "winning-row" : ""}`}
-                aria-label={`Guess ${row + 1}${guess ? `: ${guess.word.toUpperCase()}` : active ? ": current guess" : ": empty"}`}
-              >
-                {Array.from({ length: 5 }, (_, col) => {
-                  const letter =
-                    guess?.word[col]?.toUpperCase() ??
-                    (active ? input[col] : "");
-                  return (
-                    <span
-                      key={col}
-                      role="cell"
-                      className={`tile ${guess ? `${row >= initialCount.current ? "revealed" : ""} ${guess.marks[col]}` : letter ? "typed" : ""} ${active ? "current-cell" : ""}`}
-                      style={{ "--cell": col } as React.CSSProperties}
-                      aria-label={
-                        guess
-                          ? `${letter}: ${guess.marks[col] === "correct" ? "correct position" : guess.marks[col] === "present" ? "wrong position" : "absent"}`
-                          : letter || "empty"
-                      }
-                    >
-                      {letter}
-                    </span>
-                  );
-                })}
-              </div>
-            );
-          })}
+      {aside ? (
+        <div className="board-frame">
+          {board}
+          <div className="board-aside">{aside}</div>
         </div>
-        {playable && (
-          <input
-            className="grid-input"
-            aria-label="Type your five-letter guess"
-            ref={inputRef}
-            value={input}
-            disabled={busy}
-            aria-invalid={!!rejection}
-            aria-describedby={rejection ? feedbackId : undefined}
-            onFocus={(event) =>
-              event.currentTarget.setSelectionRange(input.length, input.length)
-            }
-            onKeyDown={(event) => {
-              if (event.ctrlKey || event.metaKey || event.altKey) return;
-              if (
-                /^[a-z]$/i.test(event.key) ||
-                ["Enter", "Backspace"].includes(event.key)
-              ) {
-                event.preventDefault();
-                keypress(event.key.toUpperCase());
-              }
-            }}
-            onChange={(event) => {
-              setInput(
-                event.target.value
-                  .replace(/[^a-z]/gi, "")
-                  .toUpperCase()
-                  .slice(0, 5),
-              );
-              setError("");
-              clearRejection();
-            }}
-            autoCapitalize="characters"
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            maxLength={5}
-          />
-        )}
-      </form>
+      ) : (
+        board
+      )}
       <span
         id={feedbackId}
         className="sr-only guess-feedback"

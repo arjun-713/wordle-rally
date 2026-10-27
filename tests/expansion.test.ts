@@ -258,25 +258,38 @@ test("2v2 championship locks teams between matches and preserves summed bonus sc
   assert.equal((await getStats(ids[1])).matchesWon, 0);
 });
 
-// Catalog invariants protect the expansion without depending on a particular random answer.
-test("expanded randomized pools contain 10x the old answers, valid distinct words and no reserved daily answers", () => {
+// Catalog invariants protect the curated answer list without depending on a particular random answer.
+test("curated randomized pools contain valid distinct Wordle answers and no reserved daily answers", () => {
   const valid = new Set(accepted),
-    reserved = new Set(dailyWords);
-  assert.ok(answers.length >= 12720);
-  assert.ok(pools.mixed.length >= 9060);
-  assert.equal(new Set(answers).size, answers.length);
-  assert.ok(
-    answers.every((word) => /^[a-z]{5}$/.test(word) && valid.has(word)),
-  );
+    reserved = new Set(dailyWords),
+    all = [...answers.familiar, ...answers.challenging];
+  assert.ok(all.length >= 2000);
+  assert.equal(new Set(all).size, all.length);
+  assert.ok(all.every((word) => /^[a-z]{5}$/.test(word) && valid.has(word)));
   assert.ok(pools.mixed.every((word) => !reserved.has(word)));
-  assert.equal(pools.familiar.length, 500);
+  assert.ok(pools.familiar.length > 0 && pools.challenging.length > 0);
   assert.equal(
     pools.familiar.length + pools.challenging.length,
     pools.mixed.length,
   );
-  assert.ok(pools.challenging.every((word) => !pools.familiar.includes(word)));
+  const familiar = new Set(pools.familiar);
+  assert.ok(pools.challenging.every((word) => !familiar.has(word)));
+  for (const name of ["jason", "tampa", "egypt", "zoeal", "zokor"])
+    assert.ok(!all.includes(name), name);
   const excluded = new Set(pools.mixed.slice(0, -20));
   const selected = selectWords(pools.mixed, excluded, 20);
   assert.equal(new Set(selected).size, 20);
   assert.ok(selected.every((word) => !excluded.has(word)));
+});
+
+test("selectWords falls back to used words once history covers the pool", () => {
+  const pool = ["apple", "brave", "crane", "dough", "eagle"];
+  const excluded = new Set(["apple", "brave", "crane", "dough"]);
+  const selected = selectWords(pool, excluded, 3);
+  assert.equal(selected.length, 3);
+  assert.equal(new Set(selected).size, 3);
+  assert.ok(selected.includes("eagle"));
+  const exhausted = selectWords(pool, new Set(pool), 5);
+  assert.deepEqual([...exhausted].sort(), [...pool].sort());
+  assert.throws(() => selectWords(pool, new Set(), 6));
 });

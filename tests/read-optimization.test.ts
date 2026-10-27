@@ -104,3 +104,36 @@ test("batched CAS preserves mixed TTLs, rejects a stale member atomically, and h
   assert.equal(await compareAndSet([]), true);
   assert.deepEqual(await readMany([]), []);
 });
+
+test("an optimistic guess snapshot rechecks cross-instance changes before accepting or rejecting", async () => {
+  const { rememberMutation } = await import("../lib/mutation-cache");
+  const { id, friend, code, key } = await pair();
+  const old = (await read(key))!,
+    initial: Room = JSON.parse(old);
+  await roomAction(code, friend, {
+    action: "guess",
+    round: 0,
+    word: initial.rounds[0].answer,
+  });
+  rememberMutation(key, old); // Simulate a different warm function with an older copy.
+  const accepted = await roomAction(code, id, {
+    action: "guess",
+    round: 0,
+    word: initial.rounds[0].answer,
+  });
+  assert.deepEqual(
+    accepted.players.map((p) => p.score),
+    [1, 1],
+  );
+  await roomAction(code, id, { action: "next", round: 0 });
+  rememberMutation(key, old);
+  await assert.rejects(
+    roomAction(code, id, {
+      action: "guess",
+      round: 0,
+      word: initial.rounds[0].answer,
+    }),
+    /round has ended/,
+  );
+  assert.equal((await roomAction(code, id)).current!.guesses.length, 0);
+});

@@ -130,6 +130,14 @@ export function Rules() {
         add both players’ points. The host starts and advances rounds; tied
         leaders share the win.
       </p>
+      <h3>Fast Fingers</h3>
+      <p>
+        Race through the same set of words independently. Skip and return using
+        the numbered words. Solves earn 6–1 points. Your final score combines up
+        to 50 points for guesses and 50 for speed against the average complete
+        run. Only players who solve every word qualify; an exhausted word is
+        wasted.
+      </p>
       <h3>Solo & daily</h3>
       <p>
         Unlimited offers a new puzzle after each result. Daily gives everyone

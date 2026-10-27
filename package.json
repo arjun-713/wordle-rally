@@ -12,7 +12,8 @@
     "test:e2e": "playwright test",
     "format": "prettier --write app components lib tests scripts *.ts *.json *.md",
     "test:redis": "node scripts/test-redis.mjs",
-    "benchmark:reads": "node scripts/benchmark-reads.mjs"
+    "benchmark:reads": "node scripts/benchmark-reads.mjs",
+    "benchmark:guesses": "node scripts/benchmark-guesses.mjs"
   },
   "dependencies": {
     "lucide-react": "^0.468.0",

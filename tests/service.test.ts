@@ -103,3 +103,23 @@ test("a full 16-player free-for-all accepts concurrent joins and solves without 
     16,
   );
 });
+test("rivals see ghost marks during a round but never letters until it ends", async () => {
+  const { code, ids } = await setup();
+  await roomAction(code, ids[0], { action: "start" });
+  const answer = (await secret(code)).rounds[0].answer;
+  const probe = guesses.find((w) => w !== answer)!;
+  await roomAction(code, ids[1], { action: "guess", word: probe, round: 0 });
+  const live = await roomAction(code, ids[0]);
+  const rival = live.current?.ghosts?.[ids[1]];
+  assert.equal(rival?.length, 1);
+  assert.equal(rival[0].marks.length, 5);
+  assert.equal(rival[0].word, undefined);
+  assert.equal(live.current?.ghosts?.[ids[0]], undefined);
+  const payload = JSON.stringify(live);
+  assert.equal(payload.includes(`"${probe}"`), false);
+  assert.equal(payload.includes(`"${answer}"`), false);
+  await expire(code);
+  const ended = await roomAction(code, ids[0]);
+  assert.equal(ended.current?.ended, true);
+  assert.equal(ended.current?.ghosts?.[ids[1]]?.[0].word, probe);
+});

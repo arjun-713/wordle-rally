@@ -248,7 +248,7 @@ test("a lost sixth-guess response recovers the saved loss once; an unsaved reque
       .getByRole("button", { name: "Submit guess", exact: true })
       .click();
     await saved;
-    await page.clock.fastForward(12001);
+    await page.clock.fastForward(700);
     await expect(page.locator(".game-status")).toHaveText("Out of guesses");
     await expect(page.locator(".result-word h2")).toHaveText(
       fixture.answer.toUpperCase(),
@@ -450,5 +450,166 @@ test("invalid codes and room/API boundaries fail clearly without exposing anothe
     await accessible(f.pages[1]);
   } finally {
     await f.close();
+  }
+});
+
+test("Fast Fingers lobby edits, skipping, saved words and three real clients finishing independently", async ({
+  page,
+  browser,
+}) => {
+  test.setTimeout(90000);
+  const created: PublicRoom = await (
+    await page.request.post("/api/rooms", {
+      data: {
+        name: "Arjun",
+        config: { mode: "free", players: 4, rounds: 5, seconds: 60 },
+      },
+    })
+  ).json();
+  const contexts = [await browser.newContext(), await browser.newContext()];
+  const [friend, rival] = await Promise.all(
+    contexts.map((context) => context.newPage()),
+  );
+  try {
+    await friend.goto(`/room/${created.code}`);
+    await friend.getByLabel("Your player name").fill("Maya");
+    await friend
+      .getByRole("button", { name: "Join room", exact: true })
+      .click();
+    await page.goto(`/room/${created.code}`);
+    await page
+      .getByRole("button", { name: "Room settings", exact: true })
+      .click();
+    const settings = page.getByRole("dialog", { name: "Room settings" });
+    await settings
+      .getByRole("button", { name: "Fast Fingers", exact: true })
+      .click();
+    await settings.getByLabel("Number of players").selectOption("3");
+    await settings.getByLabel("Number of words").selectOption("2");
+    await settings.getByLabel("Word difficulty").selectOption("familiar");
+    await screenshot(page, "race-lobby-settings", 390, 844);
+    await settings.getByRole("button", { name: "Save settings" }).click();
+    await expect(settings).not.toBeVisible();
+    await expect(page.locator(".lobby-rules")).toContainText("2 words");
+    await expect(friend.locator(".lobby-rules")).toContainText("2 words");
+    await rival.goto(`/room/${created.code}`);
+    await rival.getByLabel("Your player name").fill("Noor");
+    await rival.getByRole("button", { name: "Join room", exact: true }).click();
+    await page.getByRole("button", { name: "Start the match" }).click();
+    await expect(
+      friend.getByRole("heading", { name: "Fast Fingers", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Room settings", exact: true }),
+    ).toHaveCount(0);
+    const raw = await roomSecret(created.code),
+      [a, b] = raw.rounds.map((round) => round.answer);
+    let release!: () => void,
+      posts = 0,
+      confirmations = 0;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const pattern = `**/api/rooms/${created.code}**`;
+    await page.route(pattern, async (route) => {
+      if (
+        route.request().method() === "POST" &&
+        route.request().postDataJSON()?.action === "guess"
+      ) {
+        posts++;
+        const response = await route.fetch();
+        await held;
+        await route.fulfill({ response }).catch(() => {});
+      } else {
+        if (new URL(route.request().url()).searchParams.get("confirm") === "1")
+          confirmations++;
+        await route.continue();
+      }
+    });
+    try {
+      await guess(page, wrongWords(a, 1)[0]);
+      expect(posts).toBe(1);
+      expect(confirmations).toBe(1);
+    } finally {
+      release();
+      await page.unroute(pattern);
+    }
+    await page.getByLabel("Type your five-letter guess").fill("CRA");
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    await expect(page.locator(".context-meta")).toContainText("Word 2/2");
+    await page
+      .getByRole("button", { name: "Word 1, in progress", exact: true })
+      .focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(
+      page.getByRole("button", { name: "Word 2, open", exact: true }),
+    ).toBeFocused();
+
+    await page
+      .getByRole("button", { name: "Word 1, in progress", exact: true })
+      .click();
+    await expect(
+      page.getByRole("row", {
+        name: `Guess 1: ${wrongWords(a, 1)[0].toUpperCase()}`,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Type your five-letter guess")).toHaveValue(
+      "CRA",
+    );
+    await page.getByRole("button", { name: "Skip", exact: true }).click();
+    for (const [width, height] of [
+      [1440, 900],
+      [1366, 768],
+      [390, 844],
+      [320, 700],
+    ]) {
+      await screenshot(page, `race-playing-${width}`, width, height);
+      expect(
+        await page
+          .locator(".keyboard")
+          .evaluate((element) => element.getBoundingClientRect().bottom),
+      ).toBeLessThanOrEqual(height);
+    }
+    await guess(page, b);
+    await page.reload();
+    await expect(page.locator(".context-meta")).toContainText("Word 2/2");
+    await expect(page.locator(".game-status")).toContainText("Solved");
+    await page.getByRole("button", { name: "Next word", exact: true }).click();
+    await guess(page, a);
+    for (const word of [a, b]) {
+      const index = word === a ? 1 : 2;
+      await friend
+        .getByRole("button", { name: new RegExp(`^Word ${index},`) })
+        .click();
+      await guess(friend, word);
+    }
+    for (const word of wrongWords(a)) await guess(rival, word);
+    await expect(rival.locator(".game-status")).toContainText("Word wasted");
+    await rival.getByRole("button", { name: "Next word", exact: true }).click();
+    await guess(rival, b);
+    await expect(
+      page.getByRole("region", { name: "Race results", exact: true }),
+    ).toBeVisible();
+    const result: PublicRoom = await (
+      await page.request.get(`/api/rooms/${created.code}`)
+    ).json();
+    expect(
+      result.race!.standings.map((p) => p.total !== null).filter(Boolean),
+    ).toHaveLength(2);
+    expect(
+      result.race!.standings.find((p) => p.name === "Noor")!.speedScore,
+    ).toBe(0);
+    expect(
+      result.race!.standings.find((p) => p.name === "Noor")!.total,
+    ).toBeNull();
+    await screenshot(page, "race-results-mobile", 390, 844);
+    await accessible(page);
+    await page.getByRole("button", { name: "Rematch", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Room settings", exact: true }),
+    ).toBeVisible();
+  } finally {
+    await Promise.all(contexts.map((context) => context.close()));
   }
 });

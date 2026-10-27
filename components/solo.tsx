@@ -3,7 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CircleHelp, LoaderCircle, Shuffle } from "lucide-react";
 import type { Difficulty, PublicSoloGame } from "@/lib/types";
-import { isGuessRejection } from "@/lib/client-api";
+import {
+  GUESS_PROBE_MS,
+  isGuessRejection,
+  mutationApi,
+} from "@/lib/client-api";
 import { api, Modal, Rules } from "./shared";
 import { TopNav } from "./navigation";
 import { WordPlay } from "./word-play";
@@ -87,13 +91,20 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
     setPendingGuess(input.action === "guess");
     setError("");
     try {
-      apply(
-        await api<PublicSoloGame>(endpoint, {
-          ...input,
-          difficulty: level,
-          gameId: game?.id,
-        }),
-      );
+      const data = { ...input, difficulty: level, gameId: game?.id };
+      const next =
+        input.action === "guess"
+          ? await mutationApi<PublicSoloGame>(endpoint, data, {
+              confirmUrl: endpoint,
+              probeAfterMs: GUESS_PROBE_MS,
+              confirmed: (current) =>
+                !!current &&
+                current.id === game?.id &&
+                current.guesses.length > game.guesses.length &&
+                current.guesses.some((guess) => guess.word === input.word),
+            })
+          : await api<PublicSoloGame>(endpoint, data);
+      apply(next);
       return true;
     } catch (e) {
       if (input.action === "guess" && isGuessRejection(e)) throw e;
