@@ -8,8 +8,8 @@ export function roomPollDelay(
   serverNow: number,
   failures = 0,
 ): number | null {
-  if (failures) return Math.min(30000, 5000 * 2 ** Math.min(failures - 1, 3));
-  if (!room) return 5000;
+  if (failures) return Math.min(8000, 1000 * 2 ** Math.min(failures - 1, 3));
+  if (!room) return 1000;
   const me = room.players.find((p) => p.id === room.me);
   if (!me?.active) return null;
   if (
@@ -20,15 +20,14 @@ export function roomPollDelay(
     return null;
   if (room.status === "finished") {
     if (room.host === room.me) return null;
-    return quietFor >= 120000 ? 30000 : quietFor >= 30000 ? 15000 : 5000;
+    return quietFor >= 120000 ? 5000 : 1000;
   }
   const liveRound =
     room.status === "playing" && !!room.current && !room.current.ended;
-  let delay = room.current?.ended ? 3000 : quietFor >= 45000 ? 15000 : 5000;
+  let delay = room.current?.ended ? 750 : quietFor >= 120000 ? 3000 : 1000;
   // Ghost boards show rivals' rows, so a live round polls faster until it has
   // been quiet for two minutes (rivals likely idle or away).
-  if (liveRound && room.config.mode !== "race")
-    delay = quietFor >= 120000 ? 6000 : 3000;
+  if (liveRound) delay = quietFor >= 120000 ? 3000 : 750;
   // Fast Fingers closes a minute after the first complete run; wake right
   // after that cutoff so results appear without waiting out a slow poll.
   const firstFinish = room.race?.standings.reduce<number | null>(

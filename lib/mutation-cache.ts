@@ -34,22 +34,46 @@ export function rememberMutation(key: string, value: string) {
   bytes += size;
 }
 
-export const MUTATION_BUDGET_MS = 7000;
-export async function mutateGame<T>(options: {
+export const MUTATION_BUDGET_MS = 4500;
+type MutationOptions<T> = {
   key: string;
   optimistic: boolean;
+  serialize?: boolean;
   load: () => Promise<string | null>;
-  attempt: (original: string | null) => Promise<T | undefined>;
+  attempt: (
+    original: string | null,
+    conflict: (current: string | null) => void,
+  ) => Promise<T | undefined>;
   busyMessage: string;
-  // Wall-clock budget for the whole transaction. It ends contention well
-  // before the browser's per-request deadline so the client gets a retryable
-  // answer instead of a timeout. Only checked between attempts, after a CAS
-  // was rejected, so the action is known not to be saved.
+  // Retry budget, checked between attempts after a rejected CAS. Individual
+  // storage calls have their own deadlines; queue time is measured separately.
   budgetMs?: number;
-}): Promise<T> {
+};
+// Concurrent guesses in a warm instance must not all fight over the same room
+// snapshot. Other rooms run independently; Redis CAS still guards other instances.
+const queues = new Map<string, Promise<void>>();
+export async function mutateGame<T>(options: MutationOptions<T>): Promise<T> {
+  if (!options.serialize || process.env.RALLY_DISABLE_MUTATION_QUEUE === "true")
+    return runMutation(options);
+  const previous = queues.get(options.key);
+  let release!: () => void;
+  const turn = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  queues.set(options.key, turn);
+  try {
+    if (previous) await measure("queue", () => previous);
+    return await runMutation(options);
+  } finally {
+    release();
+    if (queues.get(options.key) === turn) queues.delete(options.key);
+  }
+}
+async function runMutation<T>(options: MutationOptions<T>): Promise<T> {
   const started = Date.now(),
     budget = options.budgetMs ?? MUTATION_BUDGET_MS;
-  for (let retry = 0; retry < 12; retry++) {
+  let conflict: { value: string | null } | undefined;
+  for (let retry = 0; retry < 64; retry++) {
     if (retry > 0 && Date.now() - started > budget)
       throw new GameError(options.busyMessage, 503, "STORAGE_SLOW");
     const entry =
@@ -59,11 +83,16 @@ export async function mutateGame<T>(options: {
         ? snapshots.get(options.key)
         : undefined;
     const cached = entry && entry.expires > Date.now() ? entry : undefined;
-    const original = cached
-      ? await measure("snapshot", async () => cached.value)
-      : await measure("state", options.load);
+    const original = conflict
+      ? conflict.value
+      : cached
+        ? await measure("snapshot", async () => cached.value)
+        : await measure("state", options.load);
+    conflict = undefined;
     try {
-      const result = await options.attempt(original);
+      const result = await options.attempt(original, (value) => {
+        conflict = { value };
+      });
       if (result !== undefined) return result;
     } catch (error) {
       // A different instance may have advanced/rematched/removed a player.
@@ -74,7 +103,7 @@ export async function mutateGame<T>(options: {
     forgetMutation(options.key);
     // A stale optimistic snapshot isn't a contended fresh transaction. Reload
     // immediately; retain bounded backoff for actual concurrent writers.
-    if (!cached)
+    if (!cached && !conflict)
       await new Promise((resolve) => setTimeout(resolve, randomInt(5, 25)));
   }
   throw new GameError(options.busyMessage, 409, "BUSY");

@@ -1,11 +1,8 @@
 import type { PublicRoom } from "./types";
 
-// Per attempt. With one confirmed retry the worst case stays bounded, and the
-// server's own storage budget (~7s) answers well before this fires.
-export const API_TIMEOUT_MS = 9000;
-// Normal guesses (cold starts included) answer well inside this. Probing earlier
-// only doubles requests for replies that are slow but still on their way.
-export const GUESS_PROBE_MS = 2000;
+// Per attempt. Recover before a lost response turns into a long frozen board.
+export const API_TIMEOUT_MS = 5000;
+export const GUESS_PROBE_MS = 450;
 
 export class ApiError extends Error {
   constructor(
@@ -81,8 +78,9 @@ export async function api<T>(
   }
 }
 
-// A slow reply may already have been saved. Probe once, only for a slow guess;
-// never acknowledge an unconfirmed outcome. Retrying is left to mutationApi.
+// A slow reply may already have been saved. Keep checking authoritative state
+// while the POST is pending: the first read can race the commit. These reads
+// never replay a mutation or invent its marks. Only one probe is in flight.
 export async function guessApi<T>(
   url: string,
   data: unknown,
@@ -94,19 +92,24 @@ export async function guessApi<T>(
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const recovery = new Promise<T>((resolve) => {
-    timer = setTimeout(async () => {
+    const probe = async () => {
       try {
         const snapshot = await api<T>(
           probeUrl,
           undefined,
           controller.signal,
-          2500,
+          1500,
         );
-        if (confirmed(snapshot)) resolve(snapshot);
+        if (confirmed(snapshot)) {
+          resolve(snapshot);
+          return;
+        }
       } catch {
         /* The original submission remains authoritative. */
       }
-    }, probeAfterMs);
+      if (!controller.signal.aborted) timer = setTimeout(probe, 400);
+    };
+    timer = setTimeout(probe, probeAfterMs);
   });
   try {
     return await Promise.race([
@@ -141,7 +144,7 @@ export async function readApi<T>(
     return await api<T>(url, undefined, signal, timeoutMs);
   } catch (error) {
     if (signal?.aborted || !isRecoverable(error)) throw error;
-    await pause(250);
+    await pause(100);
     if (signal?.aborted) throw error;
     return api<T>(url, undefined, signal, timeoutMs);
   }
@@ -178,7 +181,7 @@ export async function mutationApi<T>(
         options.confirmUrl,
         undefined,
         undefined,
-        Math.min(timeoutMs, 5000),
+        Math.min(timeoutMs, 2000),
       );
       return options.confirmed(snapshot) ? snapshot : undefined;
     } catch (error) {
@@ -206,7 +209,7 @@ export async function mutationApi<T>(
     if (!isRecoverable(error)) throw error;
     const saved = await confirm();
     if (saved !== undefined) return saved;
-    await pause(options.retryDelayMs ?? 400);
+    await pause(options.retryDelayMs ?? 100 + Math.random() * 200);
     try {
       return await api<T>(url, data, undefined, timeoutMs);
     } catch (retryError) {

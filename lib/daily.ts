@@ -24,7 +24,7 @@ export async function dailyAction(
     load: () => read(key),
     busyMessage:
       "Your daily puzzle is busy in another tab. Refresh and try again.",
-    attempt: async (original) => {
+    attempt: async (original, conflict) => {
       let game: SoloGame | null = original ? JSON.parse(original) : null;
       const writes: { key: string; expected: string | null; value: string }[] =
         [];
@@ -98,7 +98,7 @@ export async function dailyAction(
           expected: original,
           value: JSON.stringify(game),
         });
-        if (!(await compareAndSet(writes))) {
+        if (!(await compareAndSet(writes, conflict))) {
           return undefined;
         }
       }

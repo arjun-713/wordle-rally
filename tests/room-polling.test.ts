@@ -32,19 +32,26 @@ function room(over: Partial<PublicRoom> = {}): PublicRoom {
   };
 }
 
-test("live rounds poll quickly for ghost boards and relax after two quiet minutes", () => {
-  assert.equal(roomPollDelay(room(), 0, 0), 3000);
-  assert.equal(roomPollDelay(room(), 119000, 0), 3000);
-  assert.equal(roomPollDelay(room(), 120000, 0), 6000);
+test("live rooms refresh promptly, recover quickly and relax only when idle", () => {
+  assert.equal(roomPollDelay(room(), 0, 0), 750);
+  assert.equal(roomPollDelay(room(), 119000, 0), 750);
+  assert.equal(roomPollDelay(room(), 120000, 0), 3000);
   const timed = room({
     config: { mode: "duel", players: 2, rounds: 3, seconds: 60 },
     current: { ...room().current!, endsAt: 1000 },
   });
-  assert.equal(roomPollDelay(timed, 0, 0), 1150);
+  assert.equal(roomPollDelay(timed, 0, 0), 750);
+  assert.equal(roomPollDelay(timed, 0, 900), 250);
   const ended = room({ current: { ...room().current!, ended: true } });
-  assert.equal(roomPollDelay(ended, 0, 0), 3000);
+  assert.equal(roomPollDelay(ended, 0, 0), 750);
   assert.equal(
     roomPollDelay(room({ status: "lobby", current: null }), 0, 0),
-    5000,
+    1000,
+  );
+  assert.equal(roomPollDelay(room(), 0, 0, 1), 1000);
+  assert.equal(roomPollDelay(room(), 0, 0, 8), 8000);
+  assert.equal(
+    roomPollDelay(room({ config: { ...room().config, mode: "race" } }), 0, 0),
+    750,
   );
 });

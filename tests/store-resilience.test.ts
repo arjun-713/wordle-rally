@@ -32,17 +32,25 @@ const stall = (_url: unknown, options: RequestInit) =>
     );
   });
 
-test("a stalled storage read is retried once on a fresh request", async (t) => {
+test("a stalled storage read gets a backup before its timeout and cancels the loser", async (t) => {
   withRedis(t);
+  process.env.RALLY_REDIS_TIMEOUT_MS = "1200";
   const { read, readMany } = await import("../lib/store");
-  let calls = 0;
-  t.mock.method(globalThis, "fetch", (url: unknown, options: RequestInit) =>
-    ++calls === 1
-      ? stall(url, options)
-      : Promise.resolve(Response.json({ result: "value" })),
-  );
+  let calls = 0,
+    first: AbortSignal | undefined,
+    backupWhilePending = false;
+  t.mock.method(globalThis, "fetch", (url: unknown, options: RequestInit) => {
+    if (++calls === 1) {
+      first = options.signal!;
+      return stall(url, options);
+    }
+    backupWhilePending = !first!.aborted;
+    return Promise.resolve(Response.json({ result: "value" }));
+  });
   assert.equal(await read("rally:room:ABCDEF"), "value");
   assert.equal(calls, 2);
+  assert.equal(backupWhilePending, true);
+  assert.equal(first!.aborted, true);
 
   calls = 0;
   t.mock.method(globalThis, "fetch", async () => {

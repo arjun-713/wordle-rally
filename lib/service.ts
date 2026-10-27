@@ -173,16 +173,18 @@ export async function roomAction(
     /^[A-Z2-9]{6}$/.test(code),
     "Enter a valid six-character room code.",
   );
-  const key = roomKey(code);
+  const key = roomKey(code),
+    receivedAt = Date.now();
   return mutateGame<PublicRoom>({
     key,
     // The wall-clock budget protects hosted requests from the browser deadline;
     // the local development store serialises writers through a slow file lock.
     budgetMs: storageMode() === "redis" ? undefined : 60000,
     optimistic: input.action === "guess",
+    serialize: true,
     load: () => read(key),
     busyMessage: "The room is busy. Your action was not saved; please retry.",
-    attempt: async (original) => {
+    attempt: async (original, conflict) => {
       requireGame(
         original,
         "Room not found. Check the code or ask your host to create a new room.",
@@ -190,7 +192,7 @@ export async function roomAction(
       );
       const room: Room = JSON.parse(original);
       const before = JSON.stringify(room),
-        now = Date.now();
+        now = input.action === "guess" ? receivedAt : Date.now();
       if (!room.matchId && room.status !== "lobby") room.matchId = randomUUID();
       const action = input.action;
       requireGame(
@@ -537,15 +539,18 @@ export async function roomAction(
           expected: raw,
           value: JSON.stringify(book),
         });
-      if (JSON.stringify(room) === before) return publicRoom(room, id, now);
+      if (JSON.stringify(room) === before) return publicRoom(room, id);
       room.revision++;
       if (
-        await compareAndSet([
-          { key, expected: original, value: JSON.stringify(room), ttl: TTL },
-          ...extra,
-        ])
+        await compareAndSet(
+          [
+            { key, expected: original, value: JSON.stringify(room), ttl: TTL },
+            ...extra,
+          ],
+          conflict,
+        )
       )
-        return publicRoom(room, id, now);
+        return publicRoom(room, id);
     },
   });
 }

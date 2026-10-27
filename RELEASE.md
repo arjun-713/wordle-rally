@@ -57,7 +57,7 @@ Production sampling before the changes measured six ordinary/terminal solo guess
 - A bounded, private, 30-second mutation snapshot (2MiB total, 128KiB per entry) supplies a starting state for guesses. Every accepted result still passes the exact original state through atomic Redis CAS. Stale snapshots reload immediately; apparent validation failures are checked against fresh state. Read-only requests never trust this snapshot.
 - Low remaining rate credits are prefetched after the HTTP response using Next.js `after`. Existing shared per-minute caps remain enforced; failed prefetch never grants permission.
 - Dictionary, length and repeated-word feedback is immediate in the browser, with the same checks repeated on the server. The answer and evaluations remain server-private/authoritative.
-- A slow guess probes saved state once after 650ms. It acknowledges only the matching puzzle/match/word with an increased saved guess count, never repeats the POST, and ignores unrelated snapshots. Room confirmations use an uncached member-checked read. The 12-second hard deadline and existing error recovery remain available.
+- A slow guess starts checking saved state after 450ms and repeats the read if it raced the commit, with one confirmation read in flight at a time. It acknowledges only the matching puzzle/match/word with an increased saved guess count and ignores unrelated snapshots. Room confirmations use an uncached member-checked read. The per-attempt client deadline is five seconds; a failed mutation is reconciled before one safe retry.
 - `Server-Timing` reports application, limiter, snapshot/state, commit and Redis durations/counts without names, keys, answers or credentials.
 
 `npm run benchmark:guesses` used a real isolated Redis server with **40ms injected per Redis HTTP call**, five ordinary guesses and one final solve per variant, and 150ms typing gaps. Ordinary guesses had these measured means:
@@ -68,3 +68,21 @@ Production sampling before the changes measured six ordinary/terminal solo guess
 | Duel |    107ms |      67ms | 2–3 → 1                   |
 
 The baseline's fourth guess needed three blocking calls; optimized ordinary guesses needed one each. Completion statistics can add a read, and cold/missing/stale snapshots use the safe fresh-state path. These are controlled local measurements, not a production latency guarantee or a claim of zero network latency. `RALLY_DISABLE_MUTATION_CACHE=true` and `RALLY_DISABLE_RATE_PREFETCH=true` independently restore those baseline behaviors for diagnosis.
+
+### Concurrent-room responsiveness
+
+Gameplay responsiveness now takes priority over minimizing the monthly Redis command count. Active rounds refresh every 750ms, lobbies and recent completed matches every second, and ended rounds every 750ms. Idle and failed connections back off modestly; hidden tabs still pause. The shared room-read reuse window is 100ms instead of one second, and late reads cannot replace a newer locally committed snapshot.
+
+Room transactions run in arrival order within each function instance, with independent queues for independent rooms. Redis still atomically verifies every write across instances. A rejected CAS returns the current first record in the same response, allowing immediate re-evaluation without an extra GET. Up to 64 attempts fit within a 4.5-second retry budget, rather than failing after twelve competing attempts. Guess timestamps use server arrival time before the local queue; response clock timestamps use the actual response time. No client can provide a finish time or evaluated marks.
+
+Redis HTTP calls time out after 1.2 seconds by default. A read still pending after 200ms gets one backup request; the first successful answer wins and the other is cancelled. Writes are never duplicated at this layer. Client confirmation starts at 450ms and continues every 400ms after the previous read completes, preventing an early read from missing a later saved guess indefinitely. Background room reads have a 2.5-second per-attempt deadline.
+
+A controlled real-Redis reproduction injected **80ms per storage HTTP call** and submitted sixteen guesses simultaneously to one room:
+
+| Variant                                                            | Saved guesses | Storage HTTP calls, including final read | Burst duration |
+| ------------------------------------------------------------------ | ------------: | ---------------------------------------: | -------------: |
+| Before                                                             |       14 / 16 |                                      199 |        2,705ms |
+| Coordinated room updates                                           |       16 / 16 |                                       17 |        1,517ms |
+| Coordination disabled to exercise cross-instance conflict handling |       16 / 16 |                                      137 |        1,991ms |
+
+These are local measurements with artificial transport delay, not hosted latency guarantees. Twenty-two focused transport, recovery, polling and atomic-state checks passed against isolated Redis, including simultaneous wrong guesses and solves by sixteen players in both free-for-all and Fast Fingers. `RALLY_DISABLE_MUTATION_QUEUE=true` disables only local coordination for diagnosis; the CAS safeguards remain active.

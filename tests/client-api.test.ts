@@ -102,6 +102,28 @@ test("a slow committed guess is recovered from a matching snapshot without repea
   assert.equal(gets, 1);
 });
 
+test("guess recovery keeps checking when its first read races the commit", async (t) => {
+  const { guessApi } = await import("../lib/client-api");
+  let posts = 0,
+    gets = 0;
+  t.mock.method(globalThis, "fetch", (_url: unknown, options: RequestInit) => {
+    if (options.method === "POST") {
+      posts++;
+      return hang(options);
+    }
+    return Promise.resolve(Response.json({ saved: ++gets >= 2 }));
+  });
+  const result = await guessApi<{ saved: boolean }>(
+    "/api/rooms/ABCDEF",
+    { action: "guess", word: "crane" },
+    (snapshot) => snapshot.saved,
+    5,
+  );
+  assert.equal(result.saved, true);
+  assert.equal(posts, 1);
+  assert.equal(gets, 2);
+});
+
 const hang = (options: RequestInit) =>
   new Promise<Response>((_, reject) =>
     options.signal!.addEventListener(

@@ -28,7 +28,7 @@ export async function soloAction(
     optimistic: input.action === "guess",
     load: () => read(key),
     busyMessage: "Your puzzle is busy in another tab. Refresh and try again.",
-    attempt: async (original) => {
+    attempt: async (original, conflict) => {
       let game: SoloGame | null = original ? JSON.parse(original) : null;
       if (input.action === "read") return game ? publicSolo(game) : null;
       if (input.action === "start" && game) return publicSolo(game);
@@ -125,7 +125,7 @@ export async function soloAction(
         game.revision++;
       }
       writes.unshift({ key, expected: original, value: JSON.stringify(game) });
-      if (await compareAndSet(writes)) return publicSolo(game);
+      if (await compareAndSet(writes, conflict)) return publicSolo(game);
     },
   });
 }

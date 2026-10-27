@@ -138,6 +138,7 @@ export default function RoomClient({ code }: { code: string }) {
         const next = await readApi<RoomSyncReply>(
           `/api/rooms/${code}${current ? `?revision=${current.revision}` : ""}`,
           controller.signal,
+          2500,
         );
         if (stopped || attempt !== epoch) return;
         failures = 0;

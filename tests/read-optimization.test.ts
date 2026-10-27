@@ -137,3 +137,59 @@ test("an optimistic guess snapshot rechecks cross-instance changes before accept
   );
   assert.equal((await roomAction(code, id)).current!.guesses.length, 0);
 });
+
+test("sixteen simultaneous players keep every guess, settlement and score in normal and racing rooms", async () => {
+  for (const mode of ["free", "race"] as const) {
+    const ids = Array.from({ length: 16 }, () => randomUUID());
+    const created = await createRoom(ids[0], {
+      name: "Host",
+      config: { mode, players: 16, rounds: 1, seconds: 0, scoring: "bonus" },
+    });
+    for (const [i, id] of ids.entries())
+      if (i)
+        await roomAction(created.code, id, {
+          action: "join",
+          name: `Player ${i}`,
+        });
+    const started = await roomAction(created.code, ids[0], { action: "start" });
+    const key = `rally:room:${created.code}`,
+      raw: Room = JSON.parse((await read(key))!);
+    const wrong = raw.rounds[0].answer === "crane" ? "slate" : "crane";
+    await Promise.all(
+      ids.map((id) =>
+        roomAction(created.code, id, {
+          action: "guess",
+          word: wrong,
+          round: 0,
+          matchId: started.matchId,
+        }),
+      ),
+    );
+    await Promise.all(
+      ids.map((id) =>
+        roomAction(created.code, id, {
+          action: "guess",
+          word: raw.rounds[0].answer,
+          round: 0,
+          matchId: started.matchId,
+        }),
+      ),
+    );
+    const finished = await roomAction(created.code, ids[0]);
+    assert.equal(finished.status, "finished");
+    assert.equal(finished.current!.solved.length, 16);
+    assert.ok(finished.players.every((p) => p.score === 5));
+    assert.ok(Object.values(finished.current!.attempts).every((n) => n === 2));
+    assert.equal(finished.matches!.length, 1);
+    const revisions = finished.revision;
+    await assert.rejects(
+      roomAction(created.code, ids[0], {
+        action: "guess",
+        word: wrong,
+        round: 0,
+        matchId: started.matchId,
+      }),
+    );
+    assert.equal((await roomAction(created.code, ids[0])).revision, revisions);
+  }
+});

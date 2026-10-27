@@ -49,7 +49,7 @@ export function storageMode(): "redis" | "local" {
 // seconds is almost always a dead connection, and a fresh request succeeds, so
 // fail each call quickly enough that a mutation (several serial calls) still
 // answers well inside the browser's request deadline.
-const commandTimeout = () => Number(process.env.RALLY_REDIS_TIMEOUT_MS) || 3000;
+const commandTimeout = () => Number(process.env.RALLY_REDIS_TIMEOUT_MS) || 1200;
 const unavailable = () =>
   new GameError(
     "Room storage is temporarily unavailable. Please retry.",
@@ -57,7 +57,10 @@ const unavailable = () =>
     "STORAGE_SLOW",
   );
 class TransportError extends Error {}
-async function send<T>(args: (string | number)[]): Promise<T> {
+async function send<T>(
+  args: (string | number)[],
+  signal?: AbortSignal,
+): Promise<T> {
   const credentials = redisCredentials();
   if (!credentials)
     throw new GameError("Redis storage is not configured.", 503);
@@ -71,7 +74,9 @@ async function send<T>(args: (string | number)[]): Promise<T> {
       },
       body: JSON.stringify(args),
       cache: "no-store",
-      signal: AbortSignal.timeout(commandTimeout()),
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(commandTimeout())])
+        : AbortSignal.timeout(commandTimeout()),
     });
     if (response.status >= 500) throw new TransportError();
     json = await response.json();
@@ -82,6 +87,35 @@ async function send<T>(args: (string | number)[]): Promise<T> {
   if (!response.ok || json.error) throw unavailable();
   return json.result as T;
 }
+// A stalled read should not hold a game behind one bad connection. A second
+// independent read starts only on the slow path; neither request can write.
+async function readCommand<T>(args: (string | number)[]): Promise<T> {
+  const first = new AbortController(),
+    second = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.any([
+      send<T>(args, first.signal),
+      new Promise<T>((resolve, reject) => {
+        timer = setTimeout(() => {
+          send<T>(args, second.signal).then(resolve, reject);
+        }, 200);
+      }),
+    ]);
+  } catch (error) {
+    if (error instanceof AggregateError) {
+      const permanent = error.errors.find(
+        (e) => !(e instanceof TransportError),
+      );
+      if (permanent) throw permanent;
+    }
+    throw unavailable();
+  } finally {
+    clearTimeout(timer);
+    first.abort();
+    second.abort();
+  }
+}
 // `retry` is only safe when repeating the command cannot change the outcome:
 // reads, and rate-limit bookings (a duplicate only spends the caller's own
 // allowance; it can never grant extra requests). A CAS write is never
@@ -91,6 +125,8 @@ async function command<T>(
   options: { retry?: boolean } = {},
 ): Promise<T> {
   return measure("redis", async () => {
+    if (options.retry && ["GET", "MGET"].includes(String(args[0])))
+      return readCommand<T>(args);
     for (let attempt = 0; ; attempt++) {
       try {
         return await send<T>(args);
@@ -134,9 +170,8 @@ export const roomCacheEnabled = () =>
 // guess invalidated it, so it rarely hit, and its lookups were not bounded by
 // the Redis timeout: production polls occasionally hung for 15s+.) Within one
 // function instance, concurrent polls for a room share one GET, and a value
-// read or written here is reused for a second, which is far below the poll
-// interval, so it removes duplicate Redis reads without visible staleness.
-const ROOM_REUSE_MS = 1000;
+// read or written here is reused for 100ms to combine simultaneous polls.
+const ROOM_REUSE_MS = 100;
 const roomReads = new Map<string, Promise<string | null>>();
 const recentRooms = new Map<string, { value: string | null; at: number }>();
 function rememberRoom(code: string, value: string | null) {
@@ -154,10 +189,15 @@ export function readRoomCached(
     return Promise.resolve(recent.value);
   const existing = roomReads.get(code);
   if (existing) return existing;
+  const before = recentRooms.get(code);
   const pending = command<string | null>(["GET", `rally:room:${code}`], {
     retry: true,
   })
     .then((value) => {
+      // A guess may finish while this older GET is in flight. Its committed
+      // snapshot wins; don't replace it with the late read's older revision.
+      const updated = recentRooms.get(code);
+      if (updated && updated !== before) return updated.value;
       rememberRoom(code, value);
       return value;
     })
@@ -169,7 +209,7 @@ const casScript = `
 local actual = redis.call('MGET',unpack(KEYS))
 for i,key in ipairs(KEYS) do
  local expected = ARGV[(i-1)*3+1]
- if (actual[i] or '') ~= expected then return 0 end
+ if (actual[i] or '') ~= expected then return {0,actual[1] or false} end
 end
 local persistent = {}
 for i,key in ipairs(KEYS) do
@@ -179,19 +219,22 @@ for i,key in ipairs(KEYS) do
  else table.insert(persistent,key); table.insert(persistent,value) end
 end
 if #persistent > 0 then redis.call('MSET',unpack(persistent)) end
-return 1`;
-async function commit(writes: Write[]): Promise<boolean> {
+return {1}`;
+async function commit(
+  writes: Write[],
+  conflict?: (current: string | null) => void,
+): Promise<boolean> {
   if (!writes.length) return true;
   if (storageMode() === "redis") {
-    return (
-      (await command<number>([
-        "EVAL",
-        casScript,
-        writes.length,
-        ...writes.map((w) => w.key),
-        ...writes.flatMap((w) => [w.expected ?? "", w.value, w.ttl ?? 0]),
-      ])) === 1
-    );
+    const result = await command<[number, (string | null)?]>([
+      "EVAL",
+      casScript,
+      writes.length,
+      ...writes.map((w) => w.key),
+      ...writes.flatMap((w) => [w.expected ?? "", w.value, w.ttl ?? 0]),
+    ]);
+    if (result[0] !== 1) conflict?.(result[1] || null);
+    return result[0] === 1;
   }
   await mkdir(directory, { recursive: true });
   const lock = path.join(directory, "lock");
@@ -213,8 +256,10 @@ async function commit(writes: Write[]): Promise<boolean> {
     const now = Date.now();
     for (const [key, item] of Object.entries(data))
       if (item.expires && item.expires <= now) delete data[key];
-    if (writes.some((w) => (data[w.key]?.value ?? null) !== w.expected))
+    if (writes.some((w) => (data[w.key]?.value ?? null) !== w.expected)) {
+      conflict?.(data[writes[0].key]?.value ?? null);
       return false;
+    }
     for (const w of writes)
       data[w.key] = {
         value: w.value,
@@ -228,11 +273,14 @@ async function commit(writes: Write[]): Promise<boolean> {
     await rm(lock, { recursive: true, force: true });
   }
 }
-export async function compareAndSet(writes: Write[]): Promise<boolean> {
+export async function compareAndSet(
+  writes: Write[],
+  conflict?: (current: string | null) => void,
+): Promise<boolean> {
   return measure("commit", async () => {
     let saved: boolean;
     try {
-      saved = await commit(writes);
+      saved = await commit(writes, conflict);
     } catch (error) {
       // An unanswered CAS may or may not have applied; drop optimistic copies.
       for (const item of writes) {
