@@ -27,6 +27,20 @@ const roomKey = (code: string) => `rally:room:${code}`;
 const historyKey = (id: string) => `rally:history:${id}`;
 const TTL = 60 * 60 * 24;
 const HISTORY_LIMIT = 600;
+const creationKey = (id: string, requestId: unknown) => {
+  requireGame(
+    typeof requestId === "string" && /^[a-f0-9-]{36}$/i.test(requestId),
+    "Invalid room request.",
+  );
+  return `rally:create:${id}:${requestId}`;
+};
+export async function createdRoom(
+  id: string,
+  requestId: unknown,
+): Promise<PublicRoom | null> {
+  const code = await read(creationKey(id, requestId));
+  return code ? roomAction(code, id) : null;
+}
 export function publicRoom(
   room: Room,
   me: string,
@@ -133,6 +147,12 @@ export async function createRoom(
 ): Promise<PublicRoom> {
   const config = validateConfig(input.config),
     name = cleanName(input.name);
+  const receipt =
+    input.requestId === undefined ? null : creationKey(id, input.requestId);
+  if (receipt) {
+    const existing = await createdRoom(id, input.requestId);
+    if (existing) return existing;
+  }
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   for (let i = 0; i < 10; i++) {
     const code = Array.from(
@@ -158,9 +178,16 @@ export async function createRoom(
           value: JSON.stringify(room),
           ttl: TTL,
         },
+        ...(receipt
+          ? [{ key: receipt, expected: null, value: code, ttl: 600 }]
+          : []),
       ])
     )
       return publicRoom(room, id);
+    if (receipt) {
+      const existing = await createdRoom(id, input.requestId);
+      if (existing) return existing;
+    }
   }
   throw new GameError("Could not create a room. Please try again.", 503);
 }

@@ -193,3 +193,21 @@ test("sixteen simultaneous players keep every guess, settlement and score in nor
     assert.equal((await roomAction(created.code, ids[0])).revision, revisions);
   }
 });
+
+test("repeated room creation shares one atomic receipt scoped to its creator", async () => {
+  const { createdRoom } = await import("../lib/service");
+  const id = randomUUID(),
+    requestId = randomUUID();
+  const input = {
+    name: "Host",
+    requestId,
+    config: { mode: "duel", players: 2, rounds: 1, seconds: 0 },
+  };
+  const rooms = await Promise.all(
+    Array.from({ length: 4 }, () => createRoom(id, input)),
+  );
+  assert.equal(new Set(rooms.map((r) => r.code)).size, 1);
+  assert.equal((await createdRoom(id, requestId))!.code, rooms[0].code);
+  assert.equal(await createdRoom(randomUUID(), requestId), null);
+  assert.equal(await createdRoom(id, randomUUID()), null);
+});

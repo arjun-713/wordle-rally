@@ -42,7 +42,12 @@ test("a stalled fetch times out and aborts without retrying a mutation", async (
   t.mock.method(
     globalThis,
     "fetch",
-    async () => ({ ok: true, json: () => new Promise(() => {}) }) as Response,
+    async () =>
+      ({
+        ok: true,
+        headers: new Headers(),
+        json: () => new Promise(() => {}),
+      }) as Response,
   );
   await assert.rejects(
     api("/api/solo", undefined, undefined, 10),
@@ -122,6 +127,48 @@ test("guess recovery keeps checking when its first read races the commit", async
   assert.equal(result.saved, true);
   assert.equal(posts, 1);
   assert.equal(gets, 2);
+});
+
+test("an unsaved stalled submission gets one early replay, including a commit racing that replay", async (t) => {
+  const { guessApi } = await import("../lib/client-api");
+  for (const commitRacesReplay of [false, true]) {
+    let posts = 0,
+      saved = false;
+    const bodies: string[] = [];
+    t.mock.method(
+      globalThis,
+      "fetch",
+      (_url: unknown, options: RequestInit) => {
+        if (options.method !== "POST")
+          return commitRacesReplay
+            ? Promise.resolve(Response.json({ saved }))
+            : hang(options);
+        bodies.push(String(options.body));
+        if (++posts === 1) return hang(options);
+        saved = true;
+        return Promise.resolve(
+          commitRacesReplay
+            ? Response.json(
+                {
+                  error: "You already tried that word.",
+                  code: "INVALID_GUESS",
+                },
+                { status: 400 },
+              )
+            : Response.json({ saved: true }),
+        );
+      },
+    );
+    const result = await guessApi<{ saved: boolean }>(
+      "/api/solo",
+      { action: "guess", word: "crane", gameId: "same-puzzle" },
+      (snapshot) => snapshot.saved,
+      450,
+    );
+    assert.equal(result.saved, true);
+    assert.equal(posts, 2);
+    assert.equal(bodies[0], bodies[1]);
+  }
 });
 
 const hang = (options: RequestInit) =>

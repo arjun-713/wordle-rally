@@ -4,8 +4,14 @@ import { ArrowRight, ArrowUpRight, CircleHelp, Hash, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { type Config, type PublicRoom } from "@/lib/types";
-import { api, Modal, Rules, savedName, saveName } from "./shared";
+import { Modal, Rules, savedName, saveName } from "./shared";
 import { RoomConfigFields } from "./room-config";
+import {
+  mutationApi,
+  roomMutation,
+  readApi,
+  GUESS_PROBE_MS,
+} from "@/lib/client-api";
 import { TopNav } from "./navigation";
 
 const preview = [
@@ -56,10 +62,23 @@ export default function Home() {
     setBusy(true);
     try {
       saveName(name);
+      const requestId = crypto.randomUUID();
+      const confirmUrl = `/api/rooms?requestId=${requestId}`;
+      // Establish the browser identity before racing an initial creation.
+      // Otherwise two requests without a cookie could create different owners.
+      if (panel === "create") await readApi(confirmUrl);
       const room =
         panel === "create"
-          ? await api<PublicRoom>("/api/rooms", { name, config })
-          : await api<PublicRoom>(`/api/rooms/${code.toUpperCase()}`, {
+          ? await mutationApi<PublicRoom>(
+              "/api/rooms",
+              { name, config, requestId },
+              {
+                confirmUrl,
+                confirmed: (room) => !!room?.code,
+                probeAfterMs: GUESS_PROBE_MS,
+              },
+            )
+          : await roomMutation(code.toUpperCase(), null, {
               action: "join",
               name,
             });

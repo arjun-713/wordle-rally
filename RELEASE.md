@@ -75,7 +75,7 @@ Gameplay responsiveness now takes priority over minimizing the monthly Redis com
 
 Room transactions run in arrival order within each function instance, with independent queues for independent rooms. Redis still atomically verifies every write across instances. A rejected CAS returns the current first record in the same response, allowing immediate re-evaluation without an extra GET. Up to 64 attempts fit within a 4.5-second retry budget, rather than failing after twelve competing attempts. Guess timestamps use server arrival time before the local queue; response clock timestamps use the actual response time. No client can provide a finish time or evaluated marks.
 
-Redis HTTP calls time out after 1.2 seconds by default. A read still pending after 200ms gets one backup request; the first successful answer wins and the other is cancelled. Writes are never duplicated at this layer. Client confirmation starts at 450ms and continues every 400ms after the previous read completes, preventing an early read from missing a later saved guess indefinitely. Background room reads have a 2.5-second per-attempt deadline.
+Redis HTTP calls time out after 1.2 seconds by default. A read still pending after 200ms gets one backup request; the first successful answer wins and the other is cancelled. Writes are never duplicated at this storage layer. Client confirmation starts at 450ms and continues every 400ms after the previous read completes, preventing an early read from missing a later saved guess indefinitely. Background room reads have a 2.5-second per-attempt deadline.
 
 A controlled real-Redis reproduction injected **80ms per storage HTTP call** and submitted sixteen guesses simultaneously to one room:
 
@@ -86,3 +86,15 @@ A controlled real-Redis reproduction injected **80ms per storage HTTP call** and
 | Coordination disabled to exercise cross-instance conflict handling |       16 / 16 |                                      137 |        1,991ms |
 
 These are local measurements with artificial transport delay, not hosted latency guarantees. Twenty-two focused transport, recovery, polling and atomic-state checks passed against isolated Redis, including simultaneous wrong guesses and solves by sixteen players in both free-for-all and Fast Fingers. `RALLY_DISABLE_MUTATION_QUEUE=true` disables only local coordination for diagnosis; the CAS safeguards remain active.
+
+### Human-paced Chrome verification and submission recovery
+
+Live Chrome testing used real 6, 8, 10, 15, 6 and 15-second pauses. A four-player match used one Chrome client and three API fixture players, all with different valid words on every turn and normal background synchronization. All 24 guesses saved, the match ended correctly, and 420 fixture refreshes completed without failure. Chrome click-to-visible measurements were 949, 794, 707, 836, 442 and 419ms, including browser-control overhead; fixture guess HTTP times were 94–297ms and server processing was 3–25ms. Cache keys are room/game based, not guessed-word based.
+
+A preceding run reproduced an intermittent Chrome submission timeout and a separate room-creation timeout. This establishes an actual failure, but does not establish thinking time, Redis or a particular network layer as its cause. The other clients' corresponding guess requests were fast. A long earlier run also had failed refreshes, so this is not evidence that only Chrome can be affected.
+
+The recovery path now covers a submission stalled before saving as well as a lost reply after saving. A submission still unconfirmed at 900ms gets one identical backup, including when its confirmation read also stalls. Existing word/game/match guards prevent duplicate guesses and points; a commit racing the backup is reconciled from saved state. There is at most one replay across early and terminal recovery. Ordinary successful guesses send one POST, and gameplay POSTs request high browser fetch priority.
+
+Room creation uses a random request ID and an owner-scoped receipt atomically written alongside the room, expiring after ten minutes. Repeated requests return the same room; another identity cannot read the receipt. The home flow establishes browser identity before racing creation, so first-time visitors have one owner across attempts. Joining from home now uses the same confirmation/retry logic as joining a deep link.
+
+Slow or failed client requests log only a sanitized route category, method, duration, response phase/status, server timing and document visibility. Names, guesses, cookie values and request IDs are excluded. This distinguishes waiting for headers from waiting for a response body if another intermittent stall occurs. Twenty-four focused transport/storage checks pass, including a lost initial submission, a commit racing its replay and concurrent room creation using one receipt.

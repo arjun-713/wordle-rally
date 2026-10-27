@@ -26,6 +26,11 @@ export async function api<T>(
   timeoutMs = API_TIMEOUT_MS,
 ): Promise<T> {
   const controller = new AbortController();
+  const started = performance.now();
+  let phase = "headers",
+    status: number | undefined,
+    server: string | null = null;
+  let failed = false;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_, reject) => {
     timer = setTimeout(() => {
@@ -51,11 +56,16 @@ export async function api<T>(
               }
             : {}),
           cache: "no-store",
+          ...(data ? { priority: "high" as RequestPriority } : {}),
           signal: signal
             ? AbortSignal.any([signal, controller.signal])
             : controller.signal,
         });
+        status = response.status;
+        server = response.headers.get("server-timing");
+        phase = "body";
         const json = await response.json();
+        phase = "complete";
         if (!response.ok)
           throw new ApiError(
             json?.error ?? "Something went wrong. Please try again.",
@@ -67,6 +77,9 @@ export async function api<T>(
       deadline,
     ]);
   } catch (error) {
+    failed =
+      !signal?.aborted &&
+      (!(error instanceof ApiError) || isRecoverable(error));
     if (signal?.aborted || error instanceof ApiError) throw error;
     throw new ApiError(
       "Could not reach the game. Check your connection and try again.",
@@ -75,12 +88,27 @@ export async function api<T>(
     );
   } finally {
     clearTimeout(timer);
+    if (!signal?.aborted && (failed || performance.now() - started >= 1500))
+      console.warn("Wordrally request delay", {
+        route: url.startsWith("/api/rooms/") ? "room" : url.split("?")[0],
+        method: data ? "POST" : "GET",
+        ms: Math.round(performance.now() - started),
+        phase,
+        status,
+        server,
+        visibility:
+          typeof document === "undefined"
+            ? undefined
+            : document.visibilityState,
+      });
   }
 }
 
 // A slow reply may already have been saved. Keep checking authoritative state
 // while the POST is pending: the first read can race the commit. These reads
-// never replay a mutation or invent its marks. Only one probe is in flight.
+// never invent marks. At 900ms one identical submission may race a lost
+// request even if the confirmation read also stalled. Callers must use an action
+// protected against duplicates (guess/game IDs or a room-creation receipt).
 export async function guessApi<T>(
   url: string,
   data: unknown,
@@ -88,8 +116,36 @@ export async function guessApi<T>(
   probeAfterMs = GUESS_PROBE_MS,
   probeUrl = url,
   timeoutMs = API_TIMEOUT_MS,
+  onRetry?: () => void,
 ): Promise<T> {
   const controller = new AbortController();
+  let backupStarted = false,
+    originalError: unknown;
+  let resolveBackup!: (value: T) => void,
+    rejectBackup!: (error: unknown) => void;
+  const backup = new Promise<T>((resolve, reject) => {
+    resolveBackup = resolve;
+    rejectBackup = reject;
+  });
+  const primary = api<T>(url, data, controller.signal, timeoutMs).catch(
+    (error) => {
+      originalError = error;
+      if (!backupStarted) rejectBackup(error);
+      throw error;
+    },
+  );
+  const submissions = Promise.any([primary, backup]).catch(() => {
+    throw originalError;
+  });
+  const retryTimer = setTimeout(() => {
+    if (controller.signal.aborted) return;
+    backupStarted = true;
+    onRetry?.();
+    api<T>(url, data, controller.signal, timeoutMs).then(
+      resolveBackup,
+      rejectBackup,
+    );
+  }, 900);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const recovery = new Promise<T>((resolve) => {
     const probe = async () => {
@@ -112,12 +168,10 @@ export async function guessApi<T>(
     timer = setTimeout(probe, probeAfterMs);
   });
   try {
-    return await Promise.race([
-      api<T>(url, data, controller.signal, timeoutMs),
-      recovery,
-    ]);
+    return await Promise.race([submissions, recovery]);
   } finally {
     clearTimeout(timer);
+    clearTimeout(retryTimer);
     controller.abort();
   }
 }
@@ -175,6 +229,7 @@ export async function mutationApi<T>(
   options: MutationOptions<T>,
 ): Promise<T> {
   const timeoutMs = options.timeoutMs ?? API_TIMEOUT_MS;
+  let retried = false;
   const confirm = async (): Promise<T | undefined> => {
     try {
       const snapshot = await api<T>(
@@ -204,11 +259,15 @@ export async function mutationApi<T>(
           options.probeAfterMs,
           options.confirmUrl,
           timeoutMs,
+          () => {
+            retried = true;
+          },
         );
   } catch (error) {
     if (!isRecoverable(error)) throw error;
     const saved = await confirm();
     if (saved !== undefined) return saved;
+    if (retried) throw error;
     await pause(options.retryDelayMs ?? 100 + Math.random() * 200);
     try {
       return await api<T>(url, data, undefined, timeoutMs);
