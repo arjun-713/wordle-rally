@@ -117,6 +117,7 @@ export async function createRoom(
       inviteToken,
       ips: { [id]: "" },
       bannedIps: [],
+      spectators: [],
     };
     if (
       await compareAndSet([
@@ -158,6 +159,7 @@ export async function roomAction(
     const room: Room = JSON.parse(original);
     room.banned ??= [];
     room.banVotes ??= {};
+    room.spectators ??= [];
     const before = JSON.stringify(room),
       now = Date.now();
     if (!room.matchId && room.status !== "lobby") room.matchId = randomUUID();
@@ -185,6 +187,9 @@ export async function roomAction(
           "voteSkip",
           "vote-skip",
           "skip",
+          "spectate",
+          "spectator",
+          "watch",
         ].includes(action),
       "Unknown room action.",
     );
@@ -243,7 +248,18 @@ export async function roomAction(
           (room.ips ??= {})[id] = input.ip;
       }
     }
-    requireGame(player, "Join this room before opening the match.", 403);
+    const spectator = (room.spectators ?? []).some((s) => s.id === id);
+    const spectatingAction =
+      action === "spectate" ||
+      action === "spectator" ||
+      action === "watch";
+    requireGame(
+      player || spectator || spectatingAction,
+      "Join this room before opening the match.",
+      403,
+    );
+    if (spectator && ["guess", "next", "start", "team"].includes(String(action)))
+      requireGame(false, "Spectators cannot play.", 403);
     if (
       (room.config.matches ?? 1) > 1 &&
       ["guess", "next", "start"].includes(String(action))
@@ -379,6 +395,7 @@ export async function roomAction(
           ]),
         });
     } else if (action === "guess") {
+      requireGame(player, "Spectators cannot play.", 403);
       requireGame(typeof input.word === "string", "Enter a five-letter word.");
       submitGuess(
         room,
@@ -510,10 +527,36 @@ export async function roomAction(
         if (room.round === room.config.rounds - 1) room.status = "finished";
       }
       settle(room, now);
+    } else if (
+      action === "spectate" ||
+      action === "spectator" ||
+      action === "watch"
+    ) {
+      const ip = typeof input.ip === "string" ? input.ip : "";
+      requireGame(
+        !room.banned?.includes(id),
+        "You are banned from this room.",
+        403,
+      );
+      requireGame(
+        !(ip && room.bannedIps?.includes(ip)),
+        "You are banned from this room.",
+        403,
+      );
+      room.spectators ??= [];
+      const existing = room.spectators.find((s) => s.id === id);
+      const name =
+        typeof input.name === "string"
+          ? cleanName(input.name)
+          : (existing?.name ?? "Spectator");
+      if (existing) existing.name = name;
+      else room.spectators.push({ id, name });
     } else if (action === "leave") {
-      if (room.status === "lobby" && (room.match ?? 0) === 0)
+      if (!player && (room.spectators ?? []).some((s) => s.id === id)) {
+        room.spectators = (room.spectators ?? []).filter((s) => s.id !== id);
+      } else if (room.status === "lobby" && (room.match ?? 0) === 0)
         room.players = room.players.filter((p) => p.id !== id);
-      else player.active = false;
+      else if (player) player.active = false;
       if (room.host === id)
         room.host = room.players.find((p) => p.active && p.id !== id)?.id ?? "";
       settle(room, now);

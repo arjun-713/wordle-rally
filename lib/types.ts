@@ -86,6 +86,7 @@ export type Room = {
   inviteToken?: string;
   ips?: Record<string, string>;
   bannedIps?: string[];
+  spectators?: { id: string; name: string }[];
 };
 export type PublicRoom = Omit<Room, "rounds"> & {
   me: string;

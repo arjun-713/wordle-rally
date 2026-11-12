@@ -315,13 +315,17 @@ export default function RoomClient({ code }: { code: string }) {
   }
   const current = room?.current;
   const me = room?.players.find((p) => p.id === room.me);
+  const spectator = !!room?.spectators?.some((s) => s.id === room.me);
   const host = room?.host === room?.me;
   const seconds = current
     ? Math.max(0, Math.ceil((current.endsAt - now - offset) / 1000))
     : 0;
   const countdown =
     current?.startedAt && room?.status === "playing"
-      ? Math.max(0, Math.ceil((current.startedAt + 3000 - (now + offset)) / 1000))
+      ? Math.max(
+          0,
+          Math.ceil((current.startedAt + 3000 - (now + offset)) / 1000),
+        )
       : 0;
   const solved = !!(room && current?.solved.includes(room.me));
   const exhausted = (current?.guesses.length ?? 0) >= 6;
@@ -460,6 +464,19 @@ export default function RoomClient({ code }: { code: string }) {
                 <button className="button primary" disabled={busy}>
                   {busy ? "Joining…" : "Join room"}
                   <ArrowRight size={18} />
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() =>
+                    void action({
+                      action: "spectate",
+                      ...(name ? { name } : {}),
+                      match: 0,
+                    })
+                  }
+                >
+                  Spectate instead
                 </button>
               </form>
             )}
@@ -635,7 +652,7 @@ export default function RoomClient({ code }: { code: string }) {
                     );
                   })}
                 </ul>
-                {room.config.mode === "teams" && (
+                {room.config.mode === "teams" && me && (
                   <div className="team-picker">
                     <span>Your team</span>
                     <div className="segmented">
@@ -714,6 +731,9 @@ export default function RoomClient({ code }: { code: string }) {
                 <div className="game-context">
                   <div>
                     <h1>{MODES[room.config.mode].label}</h1>
+                    {spectator && (
+                      <span className="context-meta">Spectating</span>
+                    )}
                     {championship && (
                       <span className="context-meta">
                         Match {(room.match ?? 0) + 1}/{room.config.matches}
