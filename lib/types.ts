@@ -78,6 +78,8 @@ export type Room = {
   round: number;
   createdAt: number;
   revision: number;
+  banned?: string[];
+  banVotes?: Record<string, string[]>;
 };
 export type PublicRoom = Omit<Room, "rounds"> & {
   me: string;

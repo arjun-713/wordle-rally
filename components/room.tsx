@@ -833,3 +833,106 @@ export default function RoomClient({ code }: { code: string }) {
     </div>
   );
 }
+                            {player.id !== room.me && player.id !== room.host && (
+                              <span className="player-actions">
+                                {host && (
+                                  <>
+                                    <button
+                                      className="text-button"
+                                      disabled={busy || network}
+                                      onClick={() =>
+                                        void action({
+                                          action: "kick",
+                                          target: player.id,
+                                          match: room.match ?? 0,
+                                        })
+                                      }
+                                    >
+                                      Kick
+                                    </button>
+                                    <button
+                                      className="text-button"
+                                      disabled={busy || network}
+                                      onClick={() =>
+                                        void action({
+                                          action: "ban",
+                                          target: player.id,
+                                          match: room.match ?? 0,
+                                        })
+                                      }
+                                    >
+                                      Ban
+                                    </button>
+                                  </>
+                                )}
+                                <button
+                                  className="text-button"
+                                  disabled={busy || network}
+                                  onClick={() =>
+                                    void action({
+                                      action: "voteban",
+                                      target: player.id,
+                                      match: room.match ?? 0,
+                                    })
+                                  }
+                                >
+                                  Vote ban
+                                  {room.banVotes?.[player.id]?.length
+                                    ? ` (${room.banVotes[player.id].length})`
+                                    : ""}
+                                </button>
+                              </span>
+                            )}
+                        {player.id !== room.me && player.id !== room.host && player.active && (
+                          <span className="player-actions">
+                            {host && (
+                              <>
+                                <button
+                                  className="text-button"
+                                  disabled={busy || network}
+                                  onClick={() =>
+                                    void action({
+                                      action: "kick",
+                                      target: player.id,
+                                      match: room.match ?? 0,
+                                      matchId: room.matchId,
+                                    })
+                                  }
+                                >
+                                  Kick
+                                </button>
+                                <button
+                                  className="text-button"
+                                  disabled={busy || network}
+                                  onClick={() =>
+                                    void action({
+                                      action: "ban",
+                                      target: player.id,
+                                      match: room.match ?? 0,
+                                      matchId: room.matchId,
+                                    })
+                                  }
+                                >
+                                  Ban
+                                </button>
+                              </>
+                            )}
+                            <button
+                              className="text-button"
+                              disabled={busy || network}
+                              onClick={() =>
+                                void action({
+                                  action: "voteban",
+                                  target: player.id,
+                                  match: room.match ?? 0,
+                                  matchId: room.matchId,
+                                })
+                              }
+                            >
+                              Vote ban
+                              {room.banVotes?.[player.id]?.length
+                                ? ` (${room.banVotes[player.id].length})`
+                                : ""}
+                            </button>
+                          </span>
+                        )}

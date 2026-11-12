@@ -108,6 +108,8 @@ export async function createRoom(
       rounds: [],
       createdAt: Date.now(),
       revision: 0,
+      banned: [],
+      banVotes: {},
     };
     if (
       await compareAndSet([
@@ -141,6 +143,8 @@ export async function roomAction(
       404,
     );
     const room: Room = JSON.parse(original);
+    room.banned ??= [];
+    room.banVotes ??= {};
     const before = JSON.stringify(room),
       now = Date.now();
     if (!room.matchId && room.status !== "lobby") room.matchId = randomUUID();
@@ -157,11 +161,28 @@ export async function roomAction(
           "team",
           "replay",
           "nextMatch",
+          "kick",
+          "kickout",
+          "remove",
+          "ban",
+          "voteban",
+          "voteBan",
+          "vote_ban",
+          "vote-ban",
         ].includes(action),
       "Unknown room action.",
     );
     let player = room.players.find((p) => p.id === id);
+    const targetId = String(
+      input.target ??
+        input.targetId ??
+        input.playerId ??
+        input.player ??
+        input.userId ??
+        "",
+    ).trim();
     if (action === "join") {
+      requireGame(!room.banned?.includes(id), "You are banned from this room.", 403);
       const name = cleanName(input.name);
       if (player) {
         requireGame(
@@ -356,6 +377,75 @@ export async function roomAction(
         "That team is full.",
       );
       player.team = input.team;
+    } else if (
+      action === "kick" ||
+      action === "kickout" ||
+      action === "remove"
+    ) {
+      requireGame(room.host === id, "Only the host can kick players.", 403);
+      requireGame(targetId, "Choose a player to kick.");
+      requireGame(targetId !== id, "You cannot kick yourself.");
+      requireGame(targetId !== room.host, "You cannot kick the host.");
+      const targetPlayer = room.players.find((p) => p.id === targetId);
+      requireGame(targetPlayer, "Player not found.");
+      requireGame(targetPlayer?.active, "That player has already left.");
+      if (room.status === "lobby" && (room.match ?? 0) === 0)
+        room.players = room.players.filter((p) => p.id !== targetId);
+      else {
+        const tp = room.players.find((p) => p.id === targetId);
+        if (tp) tp.active = false;
+      }
+      settle(room, now);
+    } else if (action === "ban") {
+      requireGame(room.host === id, "Only the host can ban players.", 403);
+      requireGame(targetId, "Choose a player to ban.");
+      requireGame(targetId !== id, "You cannot ban yourself.");
+      requireGame(targetId !== room.host, "You cannot ban the host.");
+      const targetPlayer = room.players.find((p) => p.id === targetId);
+      requireGame(targetPlayer, "Player not found.");
+      requireGame(targetPlayer?.active, "That player has already left.");
+      if (!room.banned?.includes(targetId))
+        room.banned = [...(room.banned ?? []), targetId];
+      delete (room.banVotes ?? {})[targetId];
+      if (room.status === "lobby" && (room.match ?? 0) === 0)
+        room.players = room.players.filter((p) => p.id !== targetId);
+      else {
+        const tp = room.players.find((p) => p.id === targetId);
+        if (tp) tp.active = false;
+      }
+      settle(room, now);
+    } else if (
+      action === "voteban" ||
+      action === "voteBan" ||
+      action === "vote_ban" ||
+      action === "vote-ban"
+    ) {
+      requireGame(player?.active, "Join this room before voting.", 403);
+      requireGame(targetId, "Choose a player to vote to ban.");
+      requireGame(targetId !== id, "You cannot vote to ban yourself.");
+      requireGame(targetId !== room.host, "You cannot vote to ban the host.");
+      const targetPlayer = room.players.find((p) => p.id === targetId);
+      requireGame(targetPlayer, "Player not found.");
+      requireGame(targetPlayer?.active, "That player has already left.");
+      room.banVotes ??= {};
+      room.banVotes[targetId] ??= [];
+      if (!room.banVotes[targetId].includes(id))
+        room.banVotes[targetId].push(id);
+      const activePlayers = room.players.filter((p) => p.active);
+      const eligible = activePlayers.filter((p) => p.id !== targetId);
+      const threshold = Math.floor(eligible.length / 2) + 1;
+      if ((room.banVotes[targetId]?.length ?? 0) >= threshold) {
+        if (!room.banned?.includes(targetId))
+          room.banned = [...(room.banned ?? []), targetId];
+        delete room.banVotes[targetId];
+        if (room.status === "lobby" && (room.match ?? 0) === 0)
+          room.players = room.players.filter((p) => p.id !== targetId);
+        else {
+          const tp = room.players.find((p) => p.id === targetId);
+          if (tp) tp.active = false;
+        }
+        settle(room, now);
+      }
     } else if (action === "leave") {
       if (room.status === "lobby" && (room.match ?? 0) === 0)
         room.players = room.players.filter((p) => p.id !== id);
