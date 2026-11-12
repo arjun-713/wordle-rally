@@ -8,7 +8,7 @@ export function roomPollDelay(
   serverNow: number,
   failures = 0,
 ): number | null {
-  if (failures) return Math.min(30000, 5000 * 2 ** Math.min(failures - 1, 3));
+  if (failures) return Math.min(12000, 2000 * 2 ** Math.min(failures - 1, 3));
   if (!room) return 5000;
   const me = room.players.find((p) => p.id === room.me);
   if (!me?.active) return null;
@@ -22,7 +22,13 @@ export function roomPollDelay(
     if (room.host === room.me) return null;
     return quietFor >= 120000 ? 30000 : quietFor >= 30000 ? 15000 : 5000;
   }
-  let delay = room.current?.ended ? 3000 : quietFor >= 45000 ? 15000 : 5000;
+  // Never slow down an active round: rivals' boards and hints should stay
+  // fresh while everyone is typing. Only quiet lobbies back off.
+  let delay = room.current?.ended
+    ? 2500
+    : room.status === "lobby" && quietFor >= 45000
+      ? 15000
+      : 5000;
   if (
     room.status === "playing" &&
     room.config.seconds !== 0 &&

@@ -85,6 +85,77 @@ test("host leaving transfers controls and all exhausted players end a round", as
     [0, 0],
   );
 });
+test("a retried guess request returns the saved board without a second attempt or score", async () => {
+  const { code, ids } = await setup();
+  await roomAction(code, ids[0], { action: "start" });
+  const answer = (await secret(code)).rounds[0].answer,
+    requestId = randomUUID(),
+    first = await roomAction(code, ids[0], {
+      action: "guess",
+      word: answer,
+      round: 0,
+      requestId,
+    }),
+    retry = await roomAction(code, ids[0], {
+      action: "guess",
+      word: answer,
+      round: 0,
+      requestId,
+    });
+  assert.equal(retry.revision, first.revision);
+  assert.equal(retry.current?.guesses.length, 1);
+  assert.deepEqual(retry.current?.guesses, first.current?.guesses);
+  assert.deepEqual(retry.current?.solved, [ids[0]]);
+  assert.equal(retry.players.find((p) => p.id === ids[0])?.score, 1);
+  const repeated = guesses.find((word) => word !== answer)!;
+  await roomAction(code, ids[1], {
+    action: "guess",
+    word: repeated,
+    round: 0,
+  });
+  await assert.rejects(
+    roomAction(code, ids[1], {
+      action: "guess",
+      word: repeated,
+      round: 0,
+      requestId: randomUUID(),
+    }),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "DUPLICATE_GUESS",
+  );
+  await assert.rejects(
+    roomAction(code, ids[1], { action: "guess", word: "zzzzz", round: 0 }),
+    (error: unknown) =>
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "INVALID_GUESS",
+  );
+});
+test("a delayed retry still resolves after the round advanced", async () => {
+  const { code, ids } = await setup();
+  await roomAction(code, ids[0], { action: "start" });
+  const answer = (await secret(code)).rounds[0].answer,
+    requestId = randomUUID();
+  await roomAction(code, ids[0], {
+    action: "guess",
+    word: answer,
+    round: 0,
+    requestId,
+  });
+  await roomAction(code, ids[1], { action: "guess", word: answer, round: 0 });
+  await roomAction(code, ids[0], { action: "next", round: 0 });
+  const retry = await roomAction(code, ids[0], {
+    action: "guess",
+    word: answer,
+    round: 0,
+    requestId,
+  });
+  assert.equal(retry.round, 1);
+  assert.equal(retry.current?.guesses.length, 0);
+  assert.equal(retry.players.find((p) => p.id === ids[0])?.score, 1);
+});
 test("a full 16-player free-for-all accepts concurrent joins and solves without dropped points", async () => {
   const { code, ids } = await setup(16, "free");
   const lobby = await roomAction(code, ids[0]);

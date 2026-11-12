@@ -198,6 +198,8 @@ export function WordPlay({
           })}
         </div>
         {playable && (
+          // Do not reposition the caret on focus: that collapses a
+          // programmatic selection (for example select-all then delete).
           <input
             className="grid-input"
             aria-label="Type your five-letter guess"
@@ -206,9 +208,6 @@ export function WordPlay({
             disabled={busy}
             aria-invalid={!!rejection}
             aria-describedby={rejection ? feedbackId : undefined}
-            onFocus={(event) =>
-              event.currentTarget.setSelectionRange(input.length, input.length)
-            }
             onKeyDown={(event) => {
               if (event.ctrlKey || event.metaKey || event.altKey) return;
               if (

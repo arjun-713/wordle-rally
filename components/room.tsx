@@ -14,7 +14,13 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { roomPollDelay } from "@/lib/room-polling";
-import { isGuessRejection } from "@/lib/client-api";
+import {
+  ApiError,
+  isDuplicateGuess,
+  isGuessRejection,
+  isRetryableActionError,
+  newRequestId,
+} from "@/lib/client-api";
 import type { Player, PublicRoom, RoomSyncReply } from "@/lib/types";
 import { MODES } from "@/lib/types";
 import { pointsForGuess } from "@/lib/scoring";
@@ -26,6 +32,84 @@ import {
 import { WordPlay } from "./word-play";
 import { TopNav } from "./navigation";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
+const ACTION_TIMEOUT_MS = 8000;
+const GUESS_TIMEOUT_MS = 6000;
+const ACTION_RETRY_DELAYS = [250, 750, 1500];
+const GUESS_RETRY_DELAYS = [250, 750, 1500, 3000, 5000];
+const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// A lost reply may still have been committed. These helpers read the durable
+// room state so a retry can adopt the saved result instead of resubmitting.
+function hasGuess(
+  room: PublicRoom,
+  word: string,
+  round: number,
+  attemptsBefore: number,
+) {
+  if (room.round === round && room.current) {
+    if (room.current.guesses.some((guess) => guess.word === word)) return true;
+    return (
+      room.current.guesses.length > attemptsBefore &&
+      room.current.guesses.at(-1)?.word === word
+    );
+  }
+  const result = room.results[round];
+  const player = result?.players.find((entry) => entry.id === room.me);
+  return !!player && player.guesses > attemptsBefore;
+}
+function stateMoved(
+  room: PublicRoom,
+  round: number,
+  matchId?: string,
+  match = 0,
+) {
+  return (
+    room.round !== round ||
+    room.matchId !== matchId ||
+    (room.match ?? 0) !== match
+  );
+}
+function actionApplied(room: PublicRoom, data: Record<string, unknown>) {
+  switch (data.action) {
+    case "join":
+      return room.players.some(
+        (player) => player.id === room.me && player.active,
+      );
+    case "start":
+      return room.status !== "lobby";
+    case "next":
+      return room.status === "finished" || room.round > Number(data.round);
+    case "nextMatch":
+      return (room.match ?? 0) > Number(data.match ?? 0);
+    case "replay":
+      return room.status === "lobby" && (room.match ?? 0) === 0;
+    case "team":
+      return (
+        room.players.find((player) => player.id === room.me)?.team === data.team
+      );
+    case "kick":
+    case "kickout":
+    case "remove":
+    case "ban":
+      return !room.players.some(
+        (player) => player.id === String(data.target) && player.active,
+      );
+    case "voteban":
+    case "voteBan":
+    case "vote_ban":
+    case "vote-ban":
+      return (
+        !room.players.some(
+          (player) => player.id === String(data.target) && player.active,
+        ) || !!room.banVotes?.[String(data.target)]?.includes(room.me)
+      );
+    case "leave":
+      return !room.players.some(
+        (player) => player.id === room.me && player.active,
+      );
+    default:
+      return false;
+  }
+}
 function formatTime(seconds: number) {
   return `${Math.floor(seconds / 60)
     .toString()
@@ -189,16 +273,30 @@ export default function RoomClient({ code }: { code: string }) {
     };
   }, [code, apply]);
   useEffect(() => {
-    if (
-      !room ||
-      room.config.seconds === 0 ||
-      room.status !== "playing" ||
-      room.current?.ended
-    )
-      return;
-    const id = setInterval(() => setNow(Date.now()), 250);
+    if (!room || room.status !== "playing" || room.current?.ended) return;
+    // Timed rounds tick for the visible clock. Untimed rounds only need the
+    // clock while the round-start countdown is running, otherwise a stale
+    // `now` freezes the countdown and keeps the board locked forever.
+    const countdownEnds = (room.current?.startedAt ?? 0) + 3000;
+    const countdownRunning =
+      room.config.seconds === 0 &&
+      Date.now() + clockOffset.current < countdownEnds;
+    if (room.config.seconds === 0 && !countdownRunning) return;
+    const id = setInterval(() => {
+      setNow(Date.now());
+      if (
+        room.config.seconds === 0 &&
+        Date.now() + clockOffset.current >= countdownEnds
+      )
+        clearInterval(id);
+    }, 250);
     return () => clearInterval(id);
-  }, [room?.config.seconds, room?.status, room?.current?.ended]);
+  }, [
+    room?.config.seconds,
+    room?.status,
+    room?.current?.ended,
+    room?.current?.startedAt,
+  ]);
   const freshRoom = useCallback(async () => {
     const next = await api<PublicRoom>(
       `/api/rooms/${code}?fresh=1`,
@@ -335,7 +433,6 @@ export default function RoomClient({ code }: { code: string }) {
     !current.ended &&
     !solved &&
     !exhausted &&
-    countdown === 0 &&
     (room.config.seconds === 0 || seconds > 0) &&
     me?.active
   );
@@ -500,14 +597,23 @@ export default function RoomClient({ code }: { code: string }) {
                 {error}
               </div>
             )}
-            {network && (
+            {recovering ? (
               <div className="game-error reconnecting" role="status">
-                <span>Reconnecting… Your board is saved.</span>
+                <span>
+                  Connection is slow — retrying your action automatically…
+                </span>
+              </div>
+            ) : network ? (
+              <div className="game-error reconnecting" role="status">
+                <span>
+                  Connection interrupted — retrying automatically. Your board is
+                  saved.
+                </span>
                 <button onClick={() => polling.current?.sync()}>
                   Retry connection
                 </button>
               </div>
-            )}
+            ) : null}
             {room.status === "lobby" ? (
               <section className="lobby" aria-label="Room lobby">
                 <div className="lobby-title">
@@ -875,8 +981,8 @@ export default function RoomClient({ code }: { code: string }) {
                 {current?.firstSolve && (
                   <p className="first-solve">
                     First solve:{" "}
-                    {room.players.find((p) => p.id === current.firstSolve)?.name ??
-                      "a player"}
+                    {room.players.find((p) => p.id === current.firstSolve)
+                      ?.name ?? "a player"}
                   </p>
                 )}
                 {countdown > 0 && (
@@ -948,7 +1054,7 @@ export default function RoomClient({ code }: { code: string }) {
                         ) : (
                           <button
                             className="button primary"
-                            disabled={busy || network}
+                            disabled={busy}
                             onClick={() => void action({ action: "replay" })}
                           >
                             Rematch
@@ -974,13 +1080,27 @@ export default function RoomClient({ code }: { code: string }) {
                           ctx.font = "bold 28px sans-serif";
                           ctx.fillText("Word Rally", 24, 42);
                           ctx.font = "16px sans-serif";
-                          ctx.fillText(`Room ${room.code} · Round ${room.round + 1}/${room.config.rounds}`, 24, 70);
+                          ctx.fillText(
+                            `Room ${room.code} · Round ${room.round + 1}/${room.config.rounds}`,
+                            24,
+                            70,
+                          );
                           let y = 110;
                           for (const player of sorted) {
-                            ctx.fillText(`${player.name}: ${player.score} pts`, 24, y);
+                            ctx.fillText(
+                              `${player.name}: ${player.score} pts`,
+                              24,
+                              y,
+                            );
                             y += 26;
                           }
-                          ctx.fillText(room.status === "finished" ? "Match complete" : "Round complete", 24, y + 10);
+                          ctx.fillText(
+                            room.status === "finished"
+                              ? "Match complete"
+                              : "Round complete",
+                            24,
+                            y + 10,
+                          );
                           const link = document.createElement("a");
                           link.download = `word-rally-${room.code}.png`;
                           link.href = canvas.toDataURL("image/png");

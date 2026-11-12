@@ -10,8 +10,26 @@ export class ApiError extends Error {
   }
 }
 
+// Invalid dictionary words and words already on the board are both definitive
+// rejections: retrying cannot make them valid, so the row should show why.
 export const isGuessRejection = (error: unknown): error is ApiError =>
-  error instanceof ApiError && error.code === "INVALID_GUESS";
+  error instanceof ApiError &&
+  (error.code === "INVALID_GUESS" || error.code === "DUPLICATE_GUESS");
+
+export const isDuplicateGuess = (error: unknown): error is ApiError =>
+  error instanceof ApiError && error.code === "DUPLICATE_GUESS";
+
+// A lost reply or a busy room says nothing about whether the mutation saved.
+// Callers reconcile from a fresh snapshot, then retry with the same request ID.
+export const isRetryableActionError = (error: unknown): error is ApiError =>
+  error instanceof ApiError &&
+  (error.status === 0 || error.status === 503 || error.code === "ROOM_BUSY");
+
+export function newRequestId(): string {
+  const crypto = globalThis.crypto;
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 14)}`;
+}
 
 // Bound the entire response, including its body. A lost mutation reply does
 // not imply that the server failed to save it; callers reconcile before retry.

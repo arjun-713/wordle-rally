@@ -9,10 +9,12 @@ export async function GET(request: Request, context: Context) {
   return respond(async () => {
     const { code } = await context.params,
       id = await identity();
-    const known = new URL(request.url).searchParams.get("revision");
-    const revision = Number(known ?? 0);
-    const room = await readRoom(code.toUpperCase(), id, revision);
-    if (known !== null && room.revision === revision)
+    const params = new URL(request.url).searchParams;
+    const known = params.get("revision");
+    const fresh = params.get("fresh") === "1";
+    const revision = fresh ? 0 : Number(known ?? 0);
+    const room = await readRoom(code.toUpperCase(), id, revision, fresh);
+    if (!fresh && known !== null && room.revision === revision)
       return {
         unchanged: true,
         revision: room.revision,

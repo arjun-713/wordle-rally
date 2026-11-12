@@ -85,7 +85,6 @@ test("play hub, real room creation, invites, independent turns and rematch", asy
     await expect(page.locator(".game-status")).toContainText(
       "others are still playing",
     );
-    await expect(guest.getByLabel("Type your five-letter guess")).toBeEnabled();
     await guess(guest, answer);
     await expect(
       page.getByRole("button", { name: "Next round" }),
@@ -151,9 +150,14 @@ test("Unlimited keyboard input, row rejection, modal isolation, sixth-guess win 
   await expect(page.locator(".guess-count")).toHaveText("5 / 6");
   await expect(page.locator(".game-error")).toHaveCount(0);
   await input.fill("");
+  await expect(page.locator(".rejected-row")).toHaveCount(0);
   await page.emulateMedia({ reducedMotion: "reduce" });
   await input.fill("ZZZZZ");
   await input.press("Enter");
+  // Wait for the rejection before inspecting the board: the input is disabled
+  // while the guess is in flight, so clearing it any earlier is a no-op.
+  await expect(page.locator(".rejected-row")).toHaveCount(1);
+  await expect(input).toBeEnabled();
   expect(
     await page
       .locator(".word-board")
@@ -162,8 +166,8 @@ test("Unlimited keyboard input, row rejection, modal isolation, sixth-guess win 
   await input.fill("");
   const help = page.getByRole("button", { name: "How to play" });
   await help.click();
-  await page.keyboard.type("CRANE");
   await expect(page.getByRole("dialog", { name: "How to play" })).toBeVisible();
+  await page.keyboard.type("CRANE");
   await page.keyboard.press("Tab");
   await expect(
     page.getByRole("button", { name: "Close dialog" }),
@@ -281,6 +285,60 @@ test("a lost sixth-guess response recovers the saved loss once; an unsaved reque
   await page.unroute("**/api/solo");
   await page.getByRole("button", { name: "Submit guess", exact: true }).click();
   await expect(page.locator(".game-status")).toHaveText("Solved in 1/6");
+});
+
+test("a lost multiplayer guess reply recovers the saved board without resubmitting", async ({
+  browser,
+}) => {
+  test.setTimeout(90000);
+  const f = await friends(browser, {
+    mode: "duel",
+    players: 2,
+    rounds: 1,
+    seconds: 0,
+  });
+  const page = f.pages[0];
+  let release!: () => void,
+    posts = 0;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  try {
+    await start(f.pages, f.code);
+    const answer = (await roomSecret(f.code)).rounds[0].answer;
+    await page.route("**/api/rooms/*", async (route) => {
+      const request = route.request();
+      if (
+        request.method() === "POST" &&
+        request.postDataJSON()?.action === "guess"
+      ) {
+        posts++;
+        const response = await route.fetch();
+        await held;
+        await route.fulfill({ response }).catch(() => {});
+      } else await route.continue();
+    });
+    await page.getByLabel("Type your five-letter guess").fill(answer);
+    await page
+      .getByRole("button", { name: "Submit guess", exact: true })
+      .click();
+    // The client times out the withheld reply, reads the durable board, and
+    // adopts the saved guess instead of asking the player to submit again.
+    await expect(page.locator(".game-status")).toContainText("Solved in 1/6", {
+      timeout: 20000,
+    });
+    expect(posts).toBe(1);
+    const view: PublicRoom = await (
+      await page.request.get(`/api/rooms/${f.code}?fresh=1`)
+    ).json();
+    const mine = view.players.find((player) => player.id === view.me)!;
+    expect(mine.score).toBe(1);
+    expect((await roomSecret(f.code)).rounds[0].guesses[view.me]).toHaveLength(
+      1,
+    );
+  } finally {
+    release();
+    await page.unroute("**/api/rooms/*");
+    await f.close();
+  }
 });
 
 test("Daily loss resumes without another attempt and stats remain separate", async ({

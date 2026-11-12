@@ -13,18 +13,30 @@ export function invalidateRoom(code: string) {
     );
   }
 }
-export async function readRoom(code: string, id: string, minimumRevision = 0) {
+export async function readRoom(
+  code: string,
+  id: string,
+  minimumRevision = 0,
+  fresh = false,
+) {
   requireGame(
     Number.isSafeInteger(minimumRevision) && minimumRevision >= 0,
     "Invalid room revision.",
   );
+  // A client that just lost a reply cannot trust a snapshot from before it.
+  // Read through the live path and replace the cached window with it.
+  if (fresh) {
+    const room = await roomAction(code, id);
+    invalidateRoom(room.code);
+    return room;
+  }
   if (!roomCacheEnabled()) return roomAction(code, id);
-  const { view, fresh } = await roomSnapshot(
+  const snapshot = await roomSnapshot(
     code,
     id,
     () => readRoomCached(code),
     minimumRevision,
   );
-  if (fresh) invalidateRoom(code);
-  return view;
+  if (snapshot.fresh) invalidateRoom(code);
+  return snapshot.view;
 }

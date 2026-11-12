@@ -74,6 +74,11 @@ export function validateConfig(input: unknown): Config {
     seconds: c.seconds,
   };
 }
+export function cleanRequestId(value: unknown): string | undefined {
+  return typeof value === "string" && /^[a-z0-9-]{8,64}$/i.test(value)
+    ? value
+    : undefined;
+}
 export function cleanName(value: unknown): string {
   requireGame(typeof value === "string", "Enter your player name.");
   const name = value.trim().replace(/\s+/g, " ");
@@ -171,6 +176,8 @@ export function submitGuess(
       room.round === roundIndex &&
       !room.rounds[room.round].ended,
     "This round has ended. Wait for the next round.",
+    400,
+    "ROUND_ENDED",
   );
   const round = room.rounds[room.round];
   requireGame(player.active, "You have left this match.");
@@ -211,7 +218,7 @@ export function evaluateGuess(
     !guesses.some((g) => g.word === word),
     "You already tried that word.",
     400,
-    "INVALID_GUESS",
+    "DUPLICATE_GUESS",
   );
   return { word, marks: markGuess(word, answer) };
 }

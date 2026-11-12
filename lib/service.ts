@@ -6,6 +6,7 @@ import type { PublicRoom, Room, RoundResult, StatsBook } from "./types";
 import {
   begin,
   cleanName,
+  cleanRequestId,
   GameError,
   requireGame,
   selectWords,
@@ -18,7 +19,7 @@ import { compareAndSet, read, readMany, storageMode } from "./store";
 const valid = new Set(guesses);
 const roomKey = (code: string) => `rally:room:${code}`;
 const historyKey = (id: string) => `rally:history:${id}`;
-const TTL = 60 * 60 * 24;
+const TTL = 60 * 60 * 24 * 7;
 export function publicRoom(
   room: Room,
   me: string,
@@ -268,12 +269,14 @@ export async function roomAction(
         input.match === (room.match ?? 0),
         "This championship has moved to another match. Refresh to continue.",
         409,
+        "MATCH_CHANGED",
       );
     if (["guess", "next"].includes(String(action)))
       requireGame(
         !!room.matchId && input.matchId === room.matchId,
         "This match has changed. Refresh before playing again.",
         409,
+        "MATCH_CHANGED",
       );
     settle(room, now);
     if (
@@ -397,14 +400,23 @@ export async function roomAction(
     } else if (action === "guess") {
       requireGame(player, "Spectators cannot play.", 403);
       requireGame(typeof input.word === "string", "Enter a five-letter word.");
-      submitGuess(
-        room,
-        player,
-        input.word.toLowerCase(),
-        Number(input.round),
-        valid,
-        now,
-      );
+      const word = input.word.toLowerCase(),
+        roundIndex = Number(input.round),
+        requestId = cleanRequestId(input.requestId),
+        round = Number.isInteger(roundIndex)
+          ? room.rounds[roundIndex]
+          : undefined,
+        alreadySaved =
+          !!requestId &&
+          round?.guessRequests?.[player.id] === requestId &&
+          round?.guesses[player.id]?.at(-1)?.word === word;
+      // A lost reply may be retried with the same request ID. Return the saved
+      // board rather than treating the retry as a second or duplicate guess.
+      if (!alreadySaved) {
+        submitGuess(room, player, word, roundIndex, valid, now);
+        if (requestId && room.rounds[room.round])
+          (room.rounds[room.round].guessRequests ??= {})[player.id] = requestId;
+      }
     } else if (action === "next") {
       requireGame(room.host === id, "Only the host can advance rounds.", 403);
       requireGame(
@@ -434,7 +446,7 @@ export async function roomAction(
           .length < 2,
         "That team is full.",
       );
-      player.team = input.team;
+      if (player) player.team = input.team;
     } else if (
       action === "kick" ||
       action === "kickout" ||
@@ -622,16 +634,17 @@ export async function roomAction(
     await new Promise((r) => setTimeout(r, randomInt(5, 25)));
   }
   throw new GameError(
-    "The room is busy. Your action was not saved; please retry.",
+    "The room is busy. Your action is being retried automatically.",
     409,
+    "ROOM_BUSY",
   );
 }
+
 export async function resolveInvite(token: string): Promise<string | null> {
   if (!/^[a-f0-9]{32}$/.test(token)) return null;
   const code = await read(`rally:invite:${token}`);
   return code && /^[A-Z2-9]{6}$/.test(code) ? code : null;
 }
-
 
 function roundResult(room: Room, r: Room["rounds"][number]): RoundResult {
   return {

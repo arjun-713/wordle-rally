@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { api, ApiError, isGuessRejection } from "../lib/client-api";
+import {
+  api,
+  ApiError,
+  isDuplicateGuess,
+  isGuessRejection,
+  isRetryableActionError,
+  newRequestId,
+} from "../lib/client-api";
 
 test("client API retains typed guess rejection errors and successful response data", async (t) => {
   t.mock.method(globalThis, "fetch", async () =>
@@ -21,6 +28,29 @@ test("client API retains typed guess rejection errors and successful response da
   );
   assert.equal(response.status, "lost");
   assert.equal(response.guesses.length, 6);
+});
+test("transport and busy failures are retryable while guess rejections are final", () => {
+  const timeout = new ApiError("Timed out", 0, "REQUEST_TIMEOUT"),
+    network = new ApiError("Offline", 0, "NETWORK_ERROR"),
+    busy = new ApiError("Busy", 409, "ROOM_BUSY"),
+    unavailable = new ApiError("Unavailable", 503),
+    invalid = new ApiError("Unknown word", 400, "INVALID_GUESS"),
+    duplicate = new ApiError("Already tried", 400, "DUPLICATE_GUESS"),
+    changed = new ApiError("Match changed", 409, "MATCH_CHANGED");
+  assert.ok(isRetryableActionError(timeout));
+  assert.ok(isRetryableActionError(network));
+  assert.ok(isRetryableActionError(busy));
+  assert.ok(isRetryableActionError(unavailable));
+  assert.ok(!isRetryableActionError(invalid));
+  assert.ok(!isRetryableActionError(duplicate));
+  assert.ok(!isRetryableActionError(changed));
+  assert.ok(isDuplicateGuess(duplicate));
+  assert.ok(isGuessRejection(duplicate));
+  assert.ok(isGuessRejection(invalid));
+  assert.ok(!isGuessRejection(changed));
+  const id = newRequestId();
+  assert.match(id, /^[a-z0-9-]{8,64}$/i);
+  assert.notEqual(id, newRequestId());
 });
 test("a stalled fetch times out and aborts without retrying a mutation", async (t) => {
   let calls = 0,

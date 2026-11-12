@@ -1025,6 +1025,13 @@ legend {
   --tile-size: clamp(42px, min(6.5dvh, 12.8vw), 62px);
   gap: 10px;
 }
+/* Short laptop viewports still need the whole board and keyboard above the
+   fold now that the round controls sit above them. */
+@media (min-width: 601px) and (max-height: 820px) {
+  .multiplayer-main .game-stage {
+    --tile-size: clamp(40px, min(5.8dvh, 12.8vw), 62px);
+  }
+}
 .compact-room-code {
   font-size: 12px;
   letter-spacing: 0.02em;

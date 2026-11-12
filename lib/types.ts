@@ -48,6 +48,9 @@ export type Round = {
   startedAt?: number;
   solvedAt?: Record<string, number>;
   recorded?: boolean;
+  // Last committed guess request per player. A retried request with the same
+  // ID returns the saved board instead of consuming another attempt.
+  guessRequests?: Record<string, string>;
   firstSolve?: string;
   skipVotes?: string[];
 };
