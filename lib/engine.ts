@@ -59,10 +59,15 @@ export function validateConfig(input: unknown): Config {
       (Number.isInteger(c.matches) && c.matches >= 1 && c.matches <= 10),
     "Choose between 1 and 10 matches.",
   );
+  requireGame(
+    c.autoAdvance === undefined || typeof c.autoAdvance === "boolean",
+    "Choose a valid auto-advance setting.",
+  );
   return {
     ...(c.scoring ? { scoring: c.scoring } : {}),
     ...(c.difficulty ? { difficulty: c.difficulty } : {}),
     ...(c.matches ? { matches: c.matches } : {}),
+    ...(c.autoAdvance ? { autoAdvance: true } : {}),
     mode: c.mode,
     players: c.players,
     rounds: c.rounds,
@@ -181,6 +186,7 @@ export function submitGuess(
   const guess = evaluateGuess(guesses, word, round.answer, valid);
   guesses.push(guess);
   if (word === round.answer) {
+    if (!round.solved.length) round.firstSolve = player.id;
     round.solved.push(player.id);
     player.score += pointsForGuess(room.config, guesses.length);
     (round.solvedAt ??= {})[player.id] = now;

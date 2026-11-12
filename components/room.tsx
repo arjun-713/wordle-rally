@@ -55,6 +55,7 @@ export default function RoomClient({ code }: { code: string }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [network, setNetwork] = useState(false);
+  const [recovering, setRecovering] = useState(false);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [offset, setOffset] = useState(0);
@@ -148,7 +149,9 @@ export default function RoomClient({ code }: { code: string }) {
         failures++;
         if (err.status === 403) setNeedsJoin(true);
         else if (!currentRef.current) setError(err.message);
-        else setNetwork(true);
+        // One missed poll is normal on mobile networks. Keep the board open
+        // and only warn once repeated attempts have failed.
+        else if (failures >= 2) setNetwork(true);
       } finally {
         if (!stopped && attempt === epoch) {
           setLoading(false);
@@ -196,20 +199,115 @@ export default function RoomClient({ code }: { code: string }) {
     const id = setInterval(() => setNow(Date.now()), 250);
     return () => clearInterval(id);
   }, [room?.config.seconds, room?.status, room?.current?.ended]);
+  const freshRoom = useCallback(async () => {
+    const next = await api<PublicRoom>(
+      `/api/rooms/${code}?fresh=1`,
+      undefined,
+      undefined,
+      ACTION_TIMEOUT_MS,
+    );
+    apply(next);
+    return currentRef.current ?? next;
+  }, [code, apply]);
+  async function sendGuess(data: Record<string, unknown>) {
+    const word = String(data.word),
+      round = Number(data.round),
+      attemptsBefore = currentRef.current?.current?.guesses.length ?? 0,
+      matchId = currentRef.current?.matchId,
+      match = currentRef.current?.match ?? 0,
+      // Every attempt for this word reuses the ID, so a reply lost after the
+      // server committed returns the saved board instead of a duplicate error.
+      requestId = newRequestId();
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const next = await api<PublicRoom>(
+          `/api/rooms/${code}`,
+          { ...data, matchId, match, requestId },
+          undefined,
+          GUESS_TIMEOUT_MS,
+        );
+        apply(next);
+        setRecovering(false);
+        return next;
+      } catch (error) {
+        if (isGuessRejection(error) && !isDuplicateGuess(error)) throw error;
+        setRecovering(true);
+        const fresh = await freshRoom().catch(() => null);
+        if (fresh) {
+          if (hasGuess(fresh, word, round, attemptsBefore)) {
+            setRecovering(false);
+            return fresh;
+          }
+          // The round or match advanced while this guess was in flight. The
+          // board moved on, so adopt it rather than replaying a stale guess.
+          if (
+            stateMoved(fresh, round, matchId, match) ||
+            fresh.current?.ended
+          ) {
+            setRecovering(false);
+            return fresh;
+          }
+        }
+        const definitive =
+          isDuplicateGuess(error) ||
+          (error instanceof ApiError &&
+            error.status >= 400 &&
+            error.status < 500);
+        if (definitive || attempt >= GUESS_RETRY_DELAYS.length) {
+          setRecovering(false);
+          throw error;
+        }
+        await wait(GUESS_RETRY_DELAYS[attempt]);
+      }
+    }
+  }
+  async function sendAction(data: Record<string, unknown>) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const next = await api<PublicRoom>(
+          `/api/rooms/${code}`,
+          data,
+          undefined,
+          ACTION_TIMEOUT_MS,
+        );
+        apply(next);
+        return next;
+      } catch (error) {
+        // Confirm whether the action committed even when its reply was lost.
+        const fresh = await freshRoom().catch(() => null);
+        if (fresh && actionApplied(fresh, data)) return fresh;
+        if (
+          data.action === "leave" &&
+          error instanceof ApiError &&
+          error.status === 403
+        )
+          return currentRef.current ?? undefined;
+        if (
+          !isRetryableActionError(error) ||
+          attempt >= ACTION_RETRY_DELAYS.length
+        )
+          throw error;
+        setRecovering(true);
+        await wait(ACTION_RETRY_DELAYS[attempt]);
+      }
+    }
+  }
   async function action(data: Record<string, unknown>) {
     if (busyRef.current) return;
     busyRef.current = true;
     polling.current?.pause();
     setBusy(true);
     setError("");
+    setRecovering(false);
     try {
-      const next = await api<PublicRoom>(`/api/rooms/${code}`, data);
-      apply(next);
-      return next;
+      return data.action === "guess"
+        ? await sendGuess(data)
+        : await sendAction(data);
     } catch (e) {
       if (data.action === "guess" && isGuessRejection(e)) throw e;
       setError((e as Error).message);
     } finally {
+      setRecovering(false);
       busyRef.current = false;
       setBusy(false);
       polling.current?.resume();
@@ -221,6 +319,10 @@ export default function RoomClient({ code }: { code: string }) {
   const seconds = current
     ? Math.max(0, Math.ceil((current.endsAt - now - offset) / 1000))
     : 0;
+  const countdown =
+    current?.startedAt && room?.status === "playing"
+      ? Math.max(0, Math.ceil((current.startedAt + 3000 - (now + offset)) / 1000))
+      : 0;
   const solved = !!(room && current?.solved.includes(room.me));
   const exhausted = (current?.guesses.length ?? 0) >= 6;
   const playable = !!(
@@ -229,12 +331,13 @@ export default function RoomClient({ code }: { code: string }) {
     !current.ended &&
     !solved &&
     !exhausted &&
+    countdown === 0 &&
     (room.config.seconds === 0 || seconds > 0) &&
-    me?.active &&
-    !network
+    me?.active
   );
   async function copy(link = false) {
-    const value = link ? `${location.origin}/room/${code}` : code;
+    const invite = room?.inviteToken ?? code;
+    const value = link ? `${location.origin}/room/${invite}` : code;
     try {
       await navigator.clipboard.writeText(value);
       setCopied(link ? "link" : "code");
@@ -468,6 +571,57 @@ export default function RoomClient({ code }: { code: string }) {
                                 Host
                               </span>
                             )}
+                            {player.id !== room.me &&
+                              player.id !== room.host && (
+                                <span className="player-actions">
+                                  {host && (
+                                    <>
+                                      <button
+                                        className="text-button"
+                                        disabled={busy || network}
+                                        onClick={() =>
+                                          void action({
+                                            action: "kick",
+                                            target: player.id,
+                                            match: room.match ?? 0,
+                                          })
+                                        }
+                                      >
+                                        Kick
+                                      </button>
+                                      <button
+                                        className="text-button"
+                                        disabled={busy || network}
+                                        onClick={() =>
+                                          void action({
+                                            action: "ban",
+                                            target: player.id,
+                                            match: room.match ?? 0,
+                                          })
+                                        }
+                                      >
+                                        Ban
+                                      </button>
+                                    </>
+                                  )}
+                                  <button
+                                    className="text-button"
+                                    disabled={busy || network}
+                                    onClick={() =>
+                                      void action({
+                                        action: "voteban",
+                                        target: player.id,
+                                        match: room.match ?? 0,
+                                      })
+                                    }
+                                  >
+                                    Vote ban
+                                    {room.banVotes?.[player.id]?.length
+                                      ? ` (${room.banVotes[player.id].length})`
+                                      : ""}
+                                  </button>
+                                </span>
+                              )}
                           </>
                         ) : (
                           <>
@@ -518,7 +672,6 @@ export default function RoomClient({ code }: { code: string }) {
                         className="button primary"
                         disabled={
                           busy ||
-                          network ||
                           room.players.length !== room.config.players ||
                           room.players.some((player) => !player.active)
                         }
@@ -568,6 +721,9 @@ export default function RoomClient({ code }: { code: string }) {
                     )}
                   </div>
                   <div>
+                    <span className="connection-quality">
+                      {network ? "Poor connection" : "Connected"}
+                    </span>
                     <button
                       className="text-button compact-room-code"
                       onClick={() => void copy(true)}
@@ -678,6 +834,36 @@ export default function RoomClient({ code }: { code: string }) {
                     <span className="sr-only">Your turn. Six guesses.</span>
                   )}
                 </div>
+                {room.status === "playing" && !current?.ended && (
+                  <button
+                    className="text-button"
+                    disabled={busy || network}
+                    onClick={() =>
+                      void action({
+                        action: "voteSkip",
+                        match: room.match ?? 0,
+                        matchId: room.matchId,
+                      })
+                    }
+                  >
+                    Vote to skip round
+                    {current?.skipVotes?.length
+                      ? ` (${current.skipVotes.length})`
+                      : ""}
+                  </button>
+                )}
+                {current?.firstSolve && (
+                  <p className="first-solve">
+                    First solve:{" "}
+                    {room.players.find((p) => p.id === current.firstSolve)?.name ??
+                      "a player"}
+                  </p>
+                )}
+                {countdown > 0 && (
+                  <div className="round-countdown" role="status">
+                    Round starts in {countdown}
+                  </div>
+                )}
                 <WordPlay
                   key={`${room.match ?? 0}:${room.round}`}
                   guesses={current?.guesses ?? []}
@@ -709,7 +895,7 @@ export default function RoomClient({ code }: { code: string }) {
                         room.status !== "finished" ? (
                           <button
                             className="button primary"
-                            disabled={busy || network}
+                            disabled={busy}
                             onClick={() =>
                               void action({
                                 action: "next",
@@ -727,7 +913,6 @@ export default function RoomClient({ code }: { code: string }) {
                             className="button primary"
                             disabled={
                               busy ||
-                              network ||
                               room.players.some((player) => !player.active)
                             }
                             onClick={() =>
@@ -755,6 +940,35 @@ export default function RoomClient({ code }: { code: string }) {
                           Waiting for the host.
                         </span>
                       )}
+                      <button
+                        className="button secondary"
+                        onClick={() => {
+                          const canvas = document.createElement("canvas");
+                          canvas.width = 640;
+                          canvas.height = 360;
+                          const ctx = canvas.getContext("2d");
+                          if (!ctx) return;
+                          ctx.fillStyle = "#F6F3E9";
+                          ctx.fillRect(0, 0, canvas.width, canvas.height);
+                          ctx.fillStyle = "#17211D";
+                          ctx.font = "bold 28px sans-serif";
+                          ctx.fillText("Word Rally", 24, 42);
+                          ctx.font = "16px sans-serif";
+                          ctx.fillText(`Room ${room.code} · Round ${room.round + 1}/${room.config.rounds}`, 24, 70);
+                          let y = 110;
+                          for (const player of sorted) {
+                            ctx.fillText(`${player.name}: ${player.score} pts`, 24, y);
+                            y += 26;
+                          }
+                          ctx.fillText(room.status === "finished" ? "Match complete" : "Round complete", 24, y + 10);
+                          const link = document.createElement("a");
+                          link.download = `word-rally-${room.code}.png`;
+                          link.href = canvas.toDataURL("image/png");
+                          link.click();
+                        }}
+                      >
+                        Share result
+                      </button>
                     </div>
                   </section>
                 )}
@@ -772,6 +986,61 @@ export default function RoomClient({ code }: { code: string }) {
                           {player.name}
                           {player.id === room.me && <small> · you</small>}
                         </span>
+                        {player.id !== room.me &&
+                          player.id !== room.host &&
+                          player.active && (
+                            <span className="player-actions">
+                              {host && (
+                                <>
+                                  <button
+                                    className="text-button"
+                                    disabled={busy || network}
+                                    onClick={() =>
+                                      void action({
+                                        action: "kick",
+                                        target: player.id,
+                                        match: room.match ?? 0,
+                                        matchId: room.matchId,
+                                      })
+                                    }
+                                  >
+                                    Kick
+                                  </button>
+                                  <button
+                                    className="text-button"
+                                    disabled={busy || network}
+                                    onClick={() =>
+                                      void action({
+                                        action: "ban",
+                                        target: player.id,
+                                        match: room.match ?? 0,
+                                        matchId: room.matchId,
+                                      })
+                                    }
+                                  >
+                                    Ban
+                                  </button>
+                                </>
+                              )}
+                              <button
+                                className="text-button"
+                                disabled={busy || network}
+                                onClick={() =>
+                                  void action({
+                                    action: "voteban",
+                                    target: player.id,
+                                    match: room.match ?? 0,
+                                    matchId: room.matchId,
+                                  })
+                                }
+                              >
+                                Vote ban
+                                {room.banVotes?.[player.id]?.length
+                                  ? ` (${room.banVotes[player.id].length})`
+                                  : ""}
+                              </button>
+                            </span>
+                          )}
                         <span>
                           {!player.active
                             ? "Left match"
@@ -833,106 +1102,3 @@ export default function RoomClient({ code }: { code: string }) {
     </div>
   );
 }
-                            {player.id !== room.me && player.id !== room.host && (
-                              <span className="player-actions">
-                                {host && (
-                                  <>
-                                    <button
-                                      className="text-button"
-                                      disabled={busy || network}
-                                      onClick={() =>
-                                        void action({
-                                          action: "kick",
-                                          target: player.id,
-                                          match: room.match ?? 0,
-                                        })
-                                      }
-                                    >
-                                      Kick
-                                    </button>
-                                    <button
-                                      className="text-button"
-                                      disabled={busy || network}
-                                      onClick={() =>
-                                        void action({
-                                          action: "ban",
-                                          target: player.id,
-                                          match: room.match ?? 0,
-                                        })
-                                      }
-                                    >
-                                      Ban
-                                    </button>
-                                  </>
-                                )}
-                                <button
-                                  className="text-button"
-                                  disabled={busy || network}
-                                  onClick={() =>
-                                    void action({
-                                      action: "voteban",
-                                      target: player.id,
-                                      match: room.match ?? 0,
-                                    })
-                                  }
-                                >
-                                  Vote ban
-                                  {room.banVotes?.[player.id]?.length
-                                    ? ` (${room.banVotes[player.id].length})`
-                                    : ""}
-                                </button>
-                              </span>
-                            )}
-                        {player.id !== room.me && player.id !== room.host && player.active && (
-                          <span className="player-actions">
-                            {host && (
-                              <>
-                                <button
-                                  className="text-button"
-                                  disabled={busy || network}
-                                  onClick={() =>
-                                    void action({
-                                      action: "kick",
-                                      target: player.id,
-                                      match: room.match ?? 0,
-                                      matchId: room.matchId,
-                                    })
-                                  }
-                                >
-                                  Kick
-                                </button>
-                                <button
-                                  className="text-button"
-                                  disabled={busy || network}
-                                  onClick={() =>
-                                    void action({
-                                      action: "ban",
-                                      target: player.id,
-                                      match: room.match ?? 0,
-                                      matchId: room.matchId,
-                                    })
-                                  }
-                                >
-                                  Ban
-                                </button>
-                              </>
-                            )}
-                            <button
-                              className="text-button"
-                              disabled={busy || network}
-                              onClick={() =>
-                                void action({
-                                  action: "voteban",
-                                  target: player.id,
-                                  match: room.match ?? 0,
-                                  matchId: room.matchId,
-                                })
-                              }
-                            >
-                              Vote ban
-                              {room.banVotes?.[player.id]?.length
-                                ? ` (${room.banVotes[player.id].length})`
-                                : ""}
-                            </button>
-                          </span>
-                        )}

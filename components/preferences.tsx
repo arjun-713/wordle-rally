@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Settings2, Volume2, Vibrate } from "lucide-react";
 import { Modal } from "./shared";
 type Preferences = { sound: boolean; haptics: boolean };
-const defaults: Preferences = { sound: false, haptics: false };
+const defaults: Preferences = { sound: false, haptics: true };
 function preferences(): Preferences {
   try {
     return {

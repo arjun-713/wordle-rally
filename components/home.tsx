@@ -35,6 +35,7 @@ export default function Home() {
     "familiar" | "challenging" | "mixed"
   >("mixed");
   const [matches, setMatches] = useState(1),
+    [autoAdvance, setAutoAdvance] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
@@ -63,6 +64,7 @@ export default function Home() {
         scoring,
         difficulty,
         matches,
+        autoAdvance,
       };
       const room =
         panel === "create"
@@ -335,6 +337,14 @@ export default function Home() {
                       </select>
                     </label>
                   </div>
+                  <label className="checkbox-row">
+                    <input
+                      type="checkbox"
+                      checked={autoAdvance}
+                      onChange={(event) => setAutoAdvance(event.target.checked)}
+                    />
+                    Auto-advance rounds
+                  </label>
                   {matches > 1 && (
                     <label>
                       Number of matches

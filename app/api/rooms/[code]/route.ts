@@ -27,6 +27,11 @@ export async function POST(request: Request, context: Context) {
     validateGuessInput(input);
     const { code } = await context.params,
       id = await identity();
+    const ip =
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      request.headers.get("x-real-ip") ||
+      "";
+    if (ip) input.ip = ip;
     await rateLimit(
       id,
       input.action === "join" ? "join" : "actions",

@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from "node:crypto";
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { pools } from "./words";
 import { parseStats, recordPuzzle, statsKey } from "./stats";
 import guesses from "@/data/guesses.json";
@@ -40,6 +40,9 @@ export function publicRoom(
           ),
           endsAt: current.endsAt,
           ended: current.ended,
+          startedAt: current.startedAt,
+          firstSolve: current.firstSolve,
+          skipVotes: current.skipVotes,
           ...(current.ended ? { answer: current.answer } : {}),
         }
       : null,
@@ -98,6 +101,7 @@ export async function createRoom(
       { length: 6 },
       () => alphabet[randomInt(alphabet.length)],
     ).join("");
+    const inviteToken = randomBytes(16).toString("hex");
     const room: Room = {
       code,
       config,
@@ -110,6 +114,9 @@ export async function createRoom(
       revision: 0,
       banned: [],
       banVotes: {},
+      inviteToken,
+      ips: { [id]: "" },
+      bannedIps: [],
     };
     if (
       await compareAndSet([
@@ -117,6 +124,12 @@ export async function createRoom(
           key: roomKey(code),
           expected: null,
           value: JSON.stringify(room),
+          ttl: TTL,
+        },
+        {
+          key: `rally:invite:${inviteToken}`,
+          expected: null,
+          value: code,
           ttl: TTL,
         },
       ])
@@ -169,6 +182,9 @@ export async function roomAction(
           "voteBan",
           "vote_ban",
           "vote-ban",
+          "voteSkip",
+          "vote-skip",
+          "skip",
         ].includes(action),
       "Unknown room action.",
     );
@@ -182,7 +198,17 @@ export async function roomAction(
         "",
     ).trim();
     if (action === "join") {
-      requireGame(!room.banned?.includes(id), "You are banned from this room.", 403);
+      const ip = typeof input.ip === "string" ? input.ip : "";
+      requireGame(
+        !room.banned?.includes(id),
+        "You are banned from this room.",
+        403,
+      );
+      requireGame(
+        !(ip && room.bannedIps?.includes(ip)),
+        "You are banned from this room.",
+        403,
+      );
       const name = cleanName(input.name);
       if (player) {
         requireGame(
@@ -190,6 +216,8 @@ export async function roomAction(
           "You have left this match. Join a new room.",
         );
         player.name = name;
+        if (typeof input.ip === "string" && input.ip)
+          (room.ips ??= {})[id] = input.ip;
       } else {
         requireGame(
           room.status === "lobby",
@@ -211,6 +239,8 @@ export async function roomAction(
             : 1;
         player = { id, name, team, score: 0, active: true };
         room.players.push(player);
+        if (typeof input.ip === "string" && input.ip)
+          (room.ips ??= {})[id] = input.ip;
       }
     }
     requireGame(player, "Join this room before opening the match.", 403);
@@ -230,6 +260,17 @@ export async function roomAction(
         409,
       );
     settle(room, now);
+    if (
+      room.config.autoAdvance &&
+      room.status === "playing" &&
+      room.rounds[room.round]?.ended &&
+      room.round < room.config.rounds - 1
+    ) {
+      room.round++;
+      room.rounds[room.round].startedAt = now;
+      room.rounds[room.round].endsAt =
+        room.config.seconds === 0 ? 0 : now + room.config.seconds * 1000;
+    }
     const extra: { key: string; expected: string | null; value: string }[] = [];
     const books = new Map<string, { raw: string | null; book: StatsBook }>();
     const bookFor = async (playerId: string) => {
@@ -406,6 +447,9 @@ export async function roomAction(
       requireGame(targetPlayer?.active, "That player has already left.");
       if (!room.banned?.includes(targetId))
         room.banned = [...(room.banned ?? []), targetId];
+      const targetIp = room.ips?.[targetId];
+      if (targetIp && !room.bannedIps?.includes(targetIp))
+        room.bannedIps = [...(room.bannedIps ?? []), targetIp];
       delete (room.banVotes ?? {})[targetId];
       if (room.status === "lobby" && (room.match ?? 0) === 0)
         room.players = room.players.filter((p) => p.id !== targetId);
@@ -437,6 +481,9 @@ export async function roomAction(
       if ((room.banVotes[targetId]?.length ?? 0) >= threshold) {
         if (!room.banned?.includes(targetId))
           room.banned = [...(room.banned ?? []), targetId];
+        const targetIp = room.ips?.[targetId];
+        if (targetIp && !room.bannedIps?.includes(targetIp))
+          room.bannedIps = [...(room.bannedIps ?? []), targetIp];
         delete room.banVotes[targetId];
         if (room.status === "lobby" && (room.match ?? 0) === 0)
           room.players = room.players.filter((p) => p.id !== targetId);
@@ -446,6 +493,23 @@ export async function roomAction(
         }
         settle(room, now);
       }
+    } else if (
+      action === "voteSkip" ||
+      action === "vote-skip" ||
+      action === "skip"
+    ) {
+      requireGame(player?.active, "Join this room before voting.", 403);
+      const round = room.rounds[room.round];
+      requireGame(round && !round.ended, "This round has already ended.");
+      round.skipVotes ??= [];
+      if (!round.skipVotes.includes(id)) round.skipVotes.push(id);
+      const activePlayers = room.players.filter((p) => p.active);
+      const threshold = Math.floor(activePlayers.length / 2) + 1;
+      if (round.skipVotes.length >= threshold) {
+        round.ended = true;
+        if (room.round === room.config.rounds - 1) room.status = "finished";
+      }
+      settle(room, now);
     } else if (action === "leave") {
       if (room.status === "lobby" && (room.match ?? 0) === 0)
         room.players = room.players.filter((p) => p.id !== id);
@@ -519,6 +583,12 @@ export async function roomAction(
     409,
   );
 }
+export async function resolveInvite(token: string): Promise<string | null> {
+  if (!/^[a-f0-9]{32}$/.test(token)) return null;
+  const code = await read(`rally:invite:${token}`);
+  return code && /^[A-Z2-9]{6}$/.test(code) ? code : null;
+}
+
 
 function roundResult(room: Room, r: Room["rounds"][number]): RoundResult {
   return {

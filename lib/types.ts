@@ -10,6 +10,7 @@ export type Config = {
   scoring?: Scoring;
   difficulty?: Difficulty;
   matches?: number; // More than one creates a championship.
+  autoAdvance?: boolean;
 };
 export type Guess = { word: string; marks: Mark[] };
 export type SoloStats = {
@@ -47,6 +48,8 @@ export type Round = {
   startedAt?: number;
   solvedAt?: Record<string, number>;
   recorded?: boolean;
+  firstSolve?: string;
+  skipVotes?: string[];
 };
 export type RoundResult = {
   answer: string;
@@ -80,6 +83,9 @@ export type Room = {
   revision: number;
   banned?: string[];
   banVotes?: Record<string, string[]>;
+  inviteToken?: string;
+  ips?: Record<string, string>;
+  bannedIps?: string[];
 };
 export type PublicRoom = Omit<Room, "rounds"> & {
   me: string;
@@ -91,6 +97,9 @@ export type PublicRoom = Omit<Room, "rounds"> & {
     attempts: Record<string, number>;
     endsAt: number;
     ended: boolean;
+    startedAt?: number;
+    firstSolve?: string;
+    skipVotes?: string[];
     answer?: string;
   } | null;
   results: RoundResult[];
