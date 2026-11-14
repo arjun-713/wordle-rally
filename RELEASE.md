@@ -30,6 +30,8 @@ The broader historical Redis checks and read benchmarks remain in Git history; R
 
 ## Vocabulary and limits
 
+> **Superseded:** random answers now use the 2,315 curated original Wordle answers (2,085 after reserving Daily: 587 Familiar, 1,498 Challenging), because the expanded vocabulary below produced too many obscure words. See [source notes](data/SOURCES.md).
+
 The playable catalog grew from **1,272 to 14,877 answers (11.7x)**. After reserving 366 Daily words, **14,511** are available to random games. Familiar contains 500 frequent words; Challenging has 14,011; Random mix uses all 14,511. Selection already uses server-side `crypto.randomInt`; the larger pool reuses atomic no-repeat history with no new Redis reads. The expanded Wordle vocabulary includes uncommon, regional and inflected words. See [source notes](data/SOURCES.md) for pinned upstream sources and retained licenses.
 
 All advertised modes are implemented: 1v1, 2v2, 2–16 free-for-all, and championships. Spectators can follow a room without a player board. There is no separate readiness, online heartbeat, account linking or theme/contrast preference API; the round-start countdown is client presentation only and is not enforced server-side. The UI shows Joined rather than inventing Ready/Online. Reconnecting is a client transport state and explicit departure remains distinct. Auto-advance and majority vote-to-skip advance rounds without changing answer evaluation.

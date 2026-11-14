@@ -22,12 +22,12 @@ Create a room, invite friends, and play timed rounds of five-letter word guessin
 
 - Configurable mode, player count, rounds, and time limit.
 - Rooms can use No time limit while retaining six attempts per player and normal round completion rules.
-- Solo Wordle Unlimited at `/unlimited` has no timer or daily cap. Current puzzle, completed games, solves, and streaks persist for the browser; solo and multiplayer use the same non-repeating answer history. The finite answer pool is never silently recycled.
+- Solo Wordle Unlimited at `/unlimited` has no timer or daily cap. Current puzzle, completed games, solves, and streaks persist for the browser; solo and multiplayer use the same no-repeat answer history. Once a player has seen every word in a pool, previously used words are recycled rather than blocking new games.
 - 1v1, 2v2 with summed individual points, and free-for-all (1 vs all).
 - Six attempts per player. Every solver earns one point in Classic, or 6–1 points with Guess bonus. Exhausting attempts does not end other players' turns. No solve means no point.
 - Host starts and advances rounds. Names persist in the browser.
 - Answers do not repeat within a match or across matches for remembered browser identities. Browser data removal and different devices cannot be linked without accounts.
-- The 370,105-entry source dictionary supplies 20,148 accepted five-letter guesses. The playable answer catalog is 14,877 words, expanded 11.7x from 1,272. Random games exclude the 366 assigned Daily words. Familiar retains 500 frequent words; Challenging covers the rest; Random mix draws from the full non-daily pool with server-side cryptographic selection and existing no-repeat history.
+- The 370,105-entry source dictionary supplies 20,148 accepted five-letter guesses. Answers come from the 2,315 curated original Wordle answers, all everyday words. Random games exclude the 366 assigned Daily words, leaving 2,085: Familiar has the 587 that also appear in a common-word frequency list, Challenging has the other 1,498, and Random mix uses all of them, with server-side cryptographic selection and no-repeat history.
 - Code-first visual build, confirmed by user. No fabricated latency or capacity claims.
 
 ## Open Decisions

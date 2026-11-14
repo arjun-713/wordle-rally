@@ -7,11 +7,14 @@ import type { Difficulty } from "./types";
 // Append to this checked-in calendar; never regenerate past or assigned words.
 export const dailyWords = calendar.words;
 const reserved = new Set(dailyWords);
-const randomWords = answers.filter((word) => !reserved.has(word));
+// Curated original Wordle answers: Familiar words appear in a frequency list
+// (ordered by rank); Challenging holds the rest. Daily words stay reserved.
+const familiar = answers.familiar.filter((word) => !reserved.has(word));
+const challenging = answers.challenging.filter((word) => !reserved.has(word));
 export const pools = {
-  familiar: randomWords.slice(0, 500),
-  challenging: randomWords.slice(500),
-  mixed: randomWords,
+  familiar,
+  challenging,
+  mixed: [...familiar, ...challenging],
 };
 export function difficulty(value: unknown = "mixed"): Difficulty {
   requireGame(

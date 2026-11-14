@@ -42,5 +42,5 @@ Native dialogs retain focus trapping, Escape, backdrop dismissal and return focu
 
 ## Product truth
 
-Supported: duel, 2v2, 2–16 free-for-all; classic/bonus; 1–20 rounds; optional timers; three difficulty pools with 14,877 answers (14,511 available to random games after reserving Daily); championships; Daily; Unlimited; persisted names/history/stats; sound and supported-device haptics.
+Supported: duel, 2v2, 2–16 free-for-all; classic/bonus; 1–20 rounds; optional timers; three difficulty pools drawn from 2,315 curated Wordle answers (2,085 available to random games after reserving Daily); championships; Daily; Unlimited; persisted names/history/stats; sound and supported-device haptics.
 Not implemented: live online presence, player-ready acknowledgements, accounts, theme/contrast settings or team chat. Joined players are labelled Joined. Only the host starts/advances rooms. Prototype-like data is confined to the labelled homepage illustration.

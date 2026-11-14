@@ -133,16 +133,27 @@ export function selectWords(
   excluded: Set<string>,
   count: number,
 ): string[] {
-  const available = pool.filter((w) => !excluded.has(w));
+  const words = [...new Set(pool)];
   requireGame(
-    available.length >= count,
-    "This group has used the available answer pool. Try fewer rounds or expand the curated dictionary.",
+    words.length >= count,
+    "This answer pool is too small for that many rounds. Try fewer rounds.",
   );
-  for (let i = 0; i < count; i++) {
-    const j = randomInt(i, available.length);
-    [available[i], available[j]] = [available[j], available[i]];
-  }
-  return available.slice(0, count);
+  const shuffle = (list: string[], take: number) => {
+    for (let i = 0; i < take; i++) {
+      const j = randomInt(i, list.length);
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list.slice(0, take);
+  };
+  // Prefer words this group hasn't seen. Once their history covers the pool,
+  // fill the rest from previously used words instead of refusing to start.
+  const fresh = words.filter((w) => !excluded.has(w));
+  if (fresh.length >= count) return shuffle(fresh, count);
+  const used = words.filter((w) => excluded.has(w));
+  return [
+    ...shuffle(fresh, fresh.length),
+    ...shuffle(used, count - fresh.length),
+  ];
 }
 export function settle(room: Room, now: number): void {
   if (room.status !== "playing") return;
