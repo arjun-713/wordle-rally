@@ -229,10 +229,8 @@ export function Standings({
                 .filter(Boolean)
                 .join(" ")}
             >
-              <span
-                className="standing-rank"
-                aria-label={`Place ${places[index]}`}
-              >
+              <span className="standing-rank">
+                <span className="sr-only">Place </span>
                 {places[index]}
               </span>
               <PlayerAvatar
@@ -515,8 +513,13 @@ export function FinalLeaderboard({
               <span className="podium-score">
                 {row.score} {row.score === 1 ? "pt" : "pts"}
               </span>
-              <span className="podium-block" aria-label={`Place ${place}`}>
-                {place === 1 ? <Crown size={22} /> : place}
+              <span className="podium-block">
+                <span className="sr-only">Place {place}</span>
+                {place === 1 ? (
+                  <Crown size={22} aria-hidden="true" />
+                ) : (
+                  <span aria-hidden="true">{place}</span>
+                )}
               </span>
             </li>
           ))}

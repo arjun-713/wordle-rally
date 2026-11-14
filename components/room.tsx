@@ -379,9 +379,23 @@ export default function RoomClient({ code }: { code: string }) {
             return fresh;
           throw error;
         }
-        // Slow or dropped connection: keep the word on the board and resend
-        // the same request until it lands, with no reload needed.
+        // Slow or dropped connection: keep the word on the board until it
+        // lands, with no reload needed.
         setRecovering(true);
+        // The guess may have been saved with only its reply lost. If we seem
+        // to be online, check the saved board (one read) before resending.
+        if (navigator.onLine) {
+          const fresh = await freshRoom().catch(() => null);
+          if (
+            fresh &&
+            (hasGuess(fresh, word, round, attemptsBefore) ||
+              stateMoved(fresh, round, matchId, match) ||
+              fresh.current?.ended)
+          ) {
+            setRecovering(false);
+            return fresh;
+          }
+        }
         if (Date.now() - started > GUESS_RETRY_WINDOW_MS) {
           setRecovering(false);
           throw new ApiError(

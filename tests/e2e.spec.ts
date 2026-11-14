@@ -379,7 +379,8 @@ test("four real clients play a team championship with bonus scores and fixed tea
         if (index === 1) await guess(page, wrongWords(answer, 1)[0]);
         await guess(page, answer);
       }
-      await expect(f.pages[0].getByLabel("Round result")).toBeVisible();
+      // A one-round match ends on the final leaderboard.
+      await expect(f.pages[0].locator(".final-board")).toBeVisible();
       const view: PublicRoom = await (
         await f.pages[0].request.get(`/api/rooms/${f.code}`)
       ).json();
@@ -425,7 +426,7 @@ test("free-for-all timer and server results stay consistent across three clients
     await shortenRound(f.code);
     await Promise.all(f.pages.map((p) => p.goto(`/room/${f.code}`)));
     for (const page of f.pages)
-      await expect(page.locator(".game-status")).toContainText(
+      await expect(page.locator("#final-title")).toContainText(
         "No points awarded",
         { timeout: 10000 },
       );

@@ -369,8 +369,13 @@ function RaceResults({
                 <PlayerAvatar player={row} index={avatarIndex(row.id)} />
                 <strong>{row.id === room.me ? "You" : row.name}</strong>
                 <span className="podium-score">{row.total}/100</span>
-                <span className="podium-block" aria-label={`Place ${place}`}>
-                  {place === 1 ? <Crown size={22} /> : place}
+                <span className="podium-block">
+                  <span className="sr-only">Place {place}</span>
+                  {place === 1 ? (
+                    <Crown size={22} aria-hidden="true" />
+                  ) : (
+                    <span aria-hidden="true">{place}</span>
+                  )}
                 </span>
               </li>
             ))}
