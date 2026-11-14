@@ -1881,12 +1881,48 @@ tbody tr + tr {
 .round-bar .skip-vote:disabled {
   opacity: 0.55;
 }
+/* Scheduled round start: a centred overlay, so nothing shifts when it ends. */
 .round-countdown {
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--lime);
-  font-weight: 800;
-  font-size: 14px;
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-width: 132px;
+  padding: 14px 22px 16px;
+  border-radius: 16px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: 0 16px 48px #111a1640;
+  pointer-events: none;
+}
+.round-countdown span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--line);
+}
+.round-countdown strong {
+  font-size: 56px;
+  line-height: 1;
+  color: var(--lime);
+  font-variant-numeric: tabular-nums;
+  animation: countdown-pop 900ms var(--ease) both;
+}
+@keyframes countdown-pop {
+  from {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .round-countdown strong {
+    animation: none;
+  }
 }
 
 /* ---------- Standings ---------- */

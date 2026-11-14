@@ -9,6 +9,7 @@ import {
   cleanRequestId,
   GameError,
   requireGame,
+  scheduleRound,
   selectWords,
   submitGuess,
   validateConfig,
@@ -152,6 +153,17 @@ export async function createRoom(
 ): Promise<PublicRoom> {
   const config = validateConfig(input.config),
     name = cleanName(input.name);
+  // A retried create (its reply was lost) carries the same request ID and
+  // gets the room it already made, instead of a second empty room.
+  const requestId = cleanRequestId(input.requestId);
+  const createdKey = requestId ? `rally:create:${id}:${requestId}` : null;
+  if (createdKey) {
+    const existing = await read(createdKey);
+    if (existing) {
+      const raw = await read(roomKey(existing));
+      if (raw) return publicRoom(JSON.parse(raw), id);
+    }
+  }
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   for (let i = 0; i < 10; i++) {
     const code = Array.from(
@@ -190,6 +202,9 @@ export async function createRoom(
           value: code,
           ttl: TTL,
         },
+        ...(createdKey
+          ? [{ key: createdKey, expected: null, value: code, ttl: 600 }]
+          : []),
       ])
     )
       return publicRoom(room, id);
@@ -356,9 +371,7 @@ export async function roomAction(
         room.round < room.config.rounds - 1
       ) {
         room.round++;
-        room.rounds[room.round].startedAt = now;
-        room.rounds[room.round].endsAt =
-          room.config.seconds === 0 ? 0 : now + room.config.seconds * 1000;
+        scheduleRound(room, room.round, now);
       }
       const extra: { key: string; expected: string | null; value: string }[] =
         [];
@@ -473,9 +486,11 @@ export async function roomAction(
         );
         begin(room, words, now);
         if (room.config.mode === "race") {
-          room.race = { startedAt: now, finishedAt: {} };
+          // begin() scheduled the first round; the whole race shares it.
+          const start = room.rounds[0].startedAt!;
+          room.race = { startedAt: start, finishedAt: {} };
           room.rounds.forEach((round) => {
-            round.startedAt = now;
+            round.startedAt = start;
           });
         }
         for (const h of histories)
@@ -532,9 +547,7 @@ export async function roomAction(
           "The next round has already started.",
         );
         room.round++;
-        room.rounds[room.round].startedAt = now;
-        room.rounds[room.round].endsAt =
-          room.config.seconds === 0 ? 0 : now + room.config.seconds * 1000;
+        scheduleRound(room, room.round, now);
       } else if (action === "team") {
         requireGame(
           room.status === "lobby" && room.config.mode === "teams",

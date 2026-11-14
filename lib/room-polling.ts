@@ -8,11 +8,12 @@ import type { PublicRoom } from "./types";
 export const POLL = {
   // Tuned for ~200 four-player games a month with 500 as the worst case; see
   // lib/redis-budget.ts and its test before making these faster.
-  live: 2700, // a round or race with recent activity
+  live: 2900, // a round or race with recent activity
   liveQuiet: 4000, // no changes for 30s
   idle: 8000, // no changes for 2 minutes: players likely away
   roundOver: 2000, // waiting for the host or auto-advance
-  lobby: 4000, // joins and the start only need to show up within seconds
+  lobby: 4000, // players still joining: the host can't start yet
+  lobbyReady: 3000, // every seat filled: stay under the 5s start lead
   lobbyQuiet: 10000,
   lobbyIdle: 20000,
   finished: 5000,
@@ -44,12 +45,16 @@ export function roomPollDelay(
     if (room.host === room.me) return null;
     return quietFor >= 120000 ? POLL.finishedIdle : POLL.finished;
   }
-  if (room.status === "lobby")
+  if (room.status === "lobby") {
+    // The host can only start once every seat is filled, so a full room polls
+    // fast enough for everyone to catch the start countdown.
+    if (room.players.length >= room.config.players) return POLL.lobbyReady;
     return quietFor >= 300000
       ? POLL.lobbyIdle
       : quietFor >= 60000
         ? POLL.lobbyQuiet
         : POLL.lobby;
+  }
   if (room.current?.ended && !room.race) return POLL.roundOver;
   let delay: number =
     quietFor >= 120000

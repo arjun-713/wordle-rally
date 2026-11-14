@@ -303,8 +303,11 @@ export default function RoomClient({ code }: { code: string }) {
     if (!room || room.status !== "playing" || room.current?.ended) return;
     // Timed rounds tick for the visible clock. Untimed rounds only need the
     // clock while the round-start countdown is running, otherwise a stale
-    // `now` freezes the countdown and keeps the board locked forever.
-    const countdownEnds = (room.current?.startedAt ?? 0) + 3000;
+    // `now` freezes the countdown and keeps the board locked forever. The
+    // server schedules each round a few seconds ahead (startedAt).
+    const countdownEnds = room.current?.startedAt ?? 0;
+    // Tick now: a `now` left over from the last round would flash a wrong count.
+    setNow(Date.now());
     const countdownRunning =
       room.config.seconds === 0 &&
       Date.now() + clockOffset.current < countdownEnds;
@@ -466,15 +469,16 @@ export default function RoomClient({ code }: { code: string }) {
   const me = room?.players.find((p) => p.id === room.me);
   const spectator = !!room?.spectators?.some((s) => s.id === room.me);
   const host = room?.host === room?.me;
+  // Before a scheduled start the clock shows the full round length.
   const seconds = current
-    ? Math.max(0, Math.ceil((current.endsAt - now - offset) / 1000))
+    ? Math.min(
+        room?.config.seconds || Infinity,
+        Math.max(0, Math.ceil((current.endsAt - now - offset) / 1000)),
+      )
     : 0;
   const countdown =
-    current?.startedAt && room?.status === "playing"
-      ? Math.max(
-          0,
-          Math.ceil((current.startedAt + 3000 - (now + offset)) / 1000),
-        )
+    current?.startedAt && room?.status === "playing" && !current.ended
+      ? Math.max(0, Math.ceil((current.startedAt - (now + offset)) / 1000))
       : 0;
   const solved = !!(room && current?.solved.includes(room.me));
   const exhausted = (current?.guesses.length ?? 0) >= 6;
@@ -485,6 +489,7 @@ export default function RoomClient({ code }: { code: string }) {
     !solved &&
     !exhausted &&
     (room.config.seconds === 0 || seconds > 0) &&
+    countdown === 0 &&
     me?.active
   );
   async function copy(link = false) {
@@ -1093,7 +1098,8 @@ export default function RoomClient({ code }: { code: string }) {
                       </div>
                       {countdown > 0 && (
                         <div className="round-countdown" role="status">
-                          Starting in {countdown}
+                          <span>Round {room.round + 1}</span>
+                          <strong key={countdown}>{countdown}</strong>
                         </div>
                       )}
                       <WordPlay

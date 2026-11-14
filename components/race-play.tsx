@@ -111,10 +111,7 @@ export function RacePlay({
     firstFinish !== null
       ? Math.max(0, race.startedAt + firstFinish + GRACE_MS - now)
       : null;
-  const countdown = Math.max(
-    0,
-    Math.ceil((race.startedAt + 3000 - now) / 1000),
-  );
+  const countdown = Math.max(0, Math.ceil((race.startedAt - now) / 1000));
 
   return (
     <div className="match-layout race-layout">
@@ -203,7 +200,8 @@ export function RacePlay({
         </div>
         {countdown > 0 && (
           <div className="round-countdown" role="status">
-            Starting in {countdown}
+            <span>Race starts</span>
+            <strong key={countdown}>{countdown}</strong>
           </div>
         )}
         <WordPlay

@@ -172,6 +172,21 @@ export function settle(room: Room, now: number): void {
     if (room.round === room.config.rounds - 1) room.status = "finished";
   }
 }
+// Players learn about a new round on their next poll, a few seconds apart.
+// Starting each round slightly in the future gives everyone the same countdown
+// and the same start. Tests set RALLY_START_LEAD_MS=0.
+export function startLead(firstRound: boolean): number {
+  const configured = process.env.RALLY_START_LEAD_MS;
+  if (configured !== undefined && configured !== "") return Number(configured);
+  return firstRound ? 5000 : 3500;
+}
+export function scheduleRound(room: Room, index: number, now: number) {
+  const round = room.rounds[index],
+    start = now + startLead(index === 0);
+  round.startedAt = start;
+  round.endsAt =
+    room.config.seconds === 0 ? 0 : start + room.config.seconds * 1000;
+}
 export function begin(room: Room, words: string[], now: number): void {
   requireGame(room.status === "lobby", "This match has already started.");
   requireGame(
@@ -191,9 +206,7 @@ export function begin(room: Room, words: string[], now: number): void {
   }));
   room.round = 0;
   room.status = "playing";
-  room.rounds[0].startedAt = now;
-  room.rounds[0].endsAt =
-    room.config.seconds === 0 ? 0 : now + room.config.seconds * 1000;
+  scheduleRound(room, 0, now);
 }
 export function submitGuess(
   room: Room,
@@ -211,6 +224,13 @@ export function submitGuess(
     "This round has ended. Wait for the next round.",
     400,
     "ROUND_ENDED",
+  );
+  // A small allowance covers clock skew between the browser and the server.
+  requireGame(
+    now >= (room.rounds[room.round].startedAt ?? 0) - 300,
+    "The round hasn't started yet.",
+    409,
+    "NOT_STARTED",
   );
   const round = room.rounds[room.round];
   requireGame(player.active, "You have left this match.");

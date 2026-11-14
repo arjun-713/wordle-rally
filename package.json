@@ -6,7 +6,7 @@
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
-    "test": "RALLY_DATA_NAMESPACE=test tsx --test --test-concurrency=1 tests/*.test.ts",
+    "test": "RALLY_DATA_NAMESPACE=test RALLY_START_LEAD_MS=0 tsx --test --test-concurrency=1 tests/*.test.ts",
     "typecheck": "tsc --noEmit",
     "words:sync": "node scripts/sync-words.mjs",
     "test:e2e": "playwright test",

@@ -92,6 +92,12 @@ export function submitRaceGuess(
 ) {
   settleRace(room, now);
   requireGame(room.status === "playing" && room.race, "This race has ended.");
+  requireGame(
+    now >= room.race.startedAt - 300,
+    "The race hasn't started yet.",
+    409,
+    "NOT_STARTED",
+  );
   requireGame(player.active, "You have left this race.");
   requireGame(
     Number.isInteger(index) && index >= 0 && index < room.rounds.length,

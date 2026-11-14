@@ -50,7 +50,15 @@ test("an ended round polls promptly and a quiet lobby backs off", () => {
     current: { ...room().current!, ended: true },
   });
   assert.equal(roomPollDelay(ended, 0, 1000), POLL.roundOver);
-  const lobby = room({ status: "lobby", current: null });
+  // A full lobby can start any moment: poll fast enough to catch the countdown.
+  const full = room({ status: "lobby", current: null });
+  assert.equal(roomPollDelay(full, 400000, 1000), POLL.lobbyReady);
+  assert.ok(POLL.lobbyReady < 5000, "under the first-round start lead");
+  const lobby = room({
+    status: "lobby",
+    current: null,
+    config: { mode: "free", players: 4, rounds: 2, seconds: 0 },
+  });
   assert.equal(roomPollDelay(lobby, 0, 1000), POLL.lobby);
   assert.equal(roomPollDelay(lobby, 90000, 1000), POLL.lobbyQuiet);
   assert.equal(roomPollDelay(lobby, 400000, 1000), POLL.lobbyIdle);

@@ -240,3 +240,42 @@ test("ghost boards show rivals' colours but never their words", async () => {
     "rival word leaked after round end",
   );
 });
+
+test("rounds start a few seconds ahead so every player gets the same countdown", async (t) => {
+  const previous = process.env.RALLY_START_LEAD_MS;
+  delete process.env.RALLY_START_LEAD_MS;
+  t.after(() => {
+    process.env.RALLY_START_LEAD_MS = previous;
+  });
+  let now = Date.now();
+  t.mock.method(Date, "now", () => now);
+  const { code, ids } = await setup();
+  const started = await roomAction(code, ids[0], { action: "start" });
+  assert.equal(started.current!.startedAt, now + 5000);
+  assert.equal(started.current!.endsAt, now + 5000 + 30000);
+  const answer = (await secret(code)).rounds[0].answer;
+  await assert.rejects(
+    roomAction(code, ids[1], { action: "guess", word: answer, round: 0 }),
+    /hasn't started/,
+  );
+  now += 5000;
+  await roomAction(code, ids[0], { action: "guess", word: answer, round: 0 });
+  await roomAction(code, ids[1], { action: "guess", word: answer, round: 0 });
+  const next = await roomAction(code, ids[0], { action: "next", round: 0 });
+  assert.equal(next.current!.startedAt, now + 3500);
+});
+
+test("a retried room creation returns the room it already made", async () => {
+  const host = randomUUID(),
+    requestId = randomUUID();
+  const input = {
+    name: "Host",
+    config: { mode: "duel", players: 2, rounds: 1, seconds: 0 },
+    requestId,
+  };
+  const first = await createRoom(host, input);
+  const again = await createRoom(host, input);
+  assert.equal(again.code, first.code);
+  const other = await createRoom(host, { ...input, requestId: randomUUID() });
+  assert.notEqual(other.code, first.code);
+});

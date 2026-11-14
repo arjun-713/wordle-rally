@@ -21,7 +21,11 @@ export default defineConfig({
     command: "npm run start -- --port 3100",
     url: "http://localhost:3100",
     reuseExistingServer: false,
-    env: { ALLOW_LOCAL_STORE: "true", RALLY_DATA_NAMESPACE: "e2e" },
+    env: {
+      ALLOW_LOCAL_STORE: "true",
+      RALLY_DATA_NAMESPACE: "e2e",
+      RALLY_START_LEAD_MS: "0",
+    },
     timeout: 30000,
   },
 });
