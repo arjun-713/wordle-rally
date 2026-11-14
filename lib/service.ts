@@ -26,7 +26,15 @@ export function publicRoom(
   now = Date.now(),
 ): PublicRoom {
   const current = room.rounds[room.round];
-  const { rounds, ...rest } = room;
+  // IPs and ban lists are moderation data for the server only; never send them
+  // to players or spectators.
+  const {
+    rounds,
+    ips: _ips,
+    bannedIps: _bannedIps,
+    banned: _banned,
+    ...rest
+  } = room;
   return {
     ...rest,
     me,
@@ -251,15 +259,16 @@ export async function roomAction(
     }
     const spectator = (room.spectators ?? []).some((s) => s.id === id);
     const spectatingAction =
-      action === "spectate" ||
-      action === "spectator" ||
-      action === "watch";
+      action === "spectate" || action === "spectator" || action === "watch";
     requireGame(
       player || spectator || spectatingAction,
       "Join this room before opening the match.",
       403,
     );
-    if (spectator && ["guess", "next", "start", "team"].includes(String(action)))
+    if (
+      spectator &&
+      ["guess", "next", "start", "team"].includes(String(action))
+    )
       requireGame(false, "Spectators cannot play.", 403);
     if (
       (room.config.matches ?? 1) > 1 &&
