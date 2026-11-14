@@ -2616,3 +2616,389 @@ button.standing-menu:hover {
 .join-gate > p {
   text-wrap: balance;
 }
+
+/* ---------- Championship track ---------- */
+.champ {
+  container-type: inline-size;
+  width: 100%;
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+}
+.lobby > .champ {
+  margin-top: 18px;
+}
+.multiplayer-stage > .champ {
+  width: min(100%, 640px);
+}
+.modal .champ {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.champ-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 4px 16px;
+}
+.champ-kicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.champ-head h2 {
+  font-size: 20px;
+  letter-spacing: -0.03em;
+}
+.champ-head p {
+  font-size: 13px;
+  font-weight: 700;
+}
+/* Series points: side, "pts", side. */
+.champ-score {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.champ-side {
+  grid-row: 1;
+  display: grid;
+  padding: 8px 12px;
+  border: 2px solid transparent;
+  border-radius: 8px;
+  min-width: 0;
+}
+.champ-side.side-0 {
+  grid-column: 1;
+}
+.champ-side.side-1 {
+  grid-column: 3;
+  text-align: right;
+}
+.champ-side.team-0 {
+  background: color-mix(in srgb, var(--correct), var(--paper) 82%);
+}
+.champ-side.team-1 {
+  background: color-mix(in srgb, var(--present), var(--paper) 78%);
+}
+.champ-side.tone-0 {
+  background: color-mix(in srgb, var(--lime), var(--paper) 45%);
+}
+.champ-side.tone-1 {
+  background: color-mix(in srgb, var(--coral), var(--paper) 75%);
+}
+.champ-side.leading {
+  border-color: var(--ink);
+}
+.champ-side-name {
+  display: grid;
+  font-size: 13px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.champ-side-name small,
+.champ-side > small {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.champ-side strong {
+  font-size: 26px;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+.champ-vs {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+.champ-top {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+.champ-top li {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  font-size: 13px;
+}
+.champ-top li + li {
+  border-top: 1px solid var(--line);
+}
+.champ-top strong {
+  overflow-wrap: anywhere;
+}
+.champ-top small,
+.champ-top li > span:last-child {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.champ-place {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--lime);
+  font-size: 11px;
+  font-weight: 800;
+}
+/* The track: a node per match, joined by a line. Vertical by default. */
+.champ-track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+.champ-match {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  padding-bottom: 10px;
+}
+.champ-match:last-child {
+  padding-bottom: 0;
+}
+.champ-match:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 40px;
+  bottom: 4px;
+  border-left: 2px dashed var(--line);
+}
+.champ-match.is-done:not(:last-child)::after {
+  border-left-style: solid;
+  border-color: var(--ink);
+}
+.champ-node {
+  position: relative;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  margin-top: 8px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px dashed var(--line);
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.is-done .champ-node {
+  border: 2px solid var(--ink);
+  background: var(--ink);
+  color: var(--lime);
+}
+.is-live .champ-node {
+  border: 2px solid var(--ink);
+  background: var(--lime);
+  color: var(--ink);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--lime), transparent 45%);
+}
+.is-next .champ-node {
+  border: 2px solid var(--ink);
+  color: var(--ink);
+}
+.champ-card {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.is-done .champ-card {
+  background: var(--canvas);
+}
+.is-live .champ-card {
+  border: 2px solid var(--ink);
+  padding: 7px 11px;
+  background: color-mix(in srgb, var(--lime), var(--paper) 72%);
+}
+.is-next .champ-card {
+  border-color: var(--ink);
+}
+.is-later .champ-card {
+  border-style: dashed;
+  color: var(--muted);
+}
+.champ-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.champ-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.champ-tag.live,
+.champ-tag.next {
+  color: var(--ink);
+  font-weight: 800;
+}
+.champ-pulse {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--coral);
+}
+.champ-pulse::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--coral);
+  animation: champ-pulse 1.6s var(--ease) infinite;
+}
+@keyframes champ-pulse {
+  from {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: scale(2.6);
+    opacity: 0;
+  }
+}
+.champ-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  font-size: 15px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.champ-line .win {
+  font-weight: 800;
+}
+.champ-result.decided > span:not(.win) {
+  color: var(--muted);
+}
+.champ-result strong {
+  font-size: 16px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.champ-result strong span[aria-hidden] {
+  margin-inline: 3px;
+}
+.champ-vs-word {
+  font-size: 12px;
+  color: var(--muted);
+}
+.champ-note {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.champ-roster {
+  align-items: center;
+  font-size: 13px;
+}
+.champ-stack {
+  display: flex;
+  padding-left: 6px;
+}
+.champ-stack .avatar {
+  width: 22px;
+  height: 22px;
+  margin-left: -6px;
+  font-size: 9px;
+  border: 2px solid var(--paper);
+}
+/* Wide enough and few matches: lay the track out left to right. */
+@container (min-width: 520px) {
+  .champ-fits .champ-track {
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+  .champ-fits .champ-match {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: start;
+    gap: 8px;
+    padding-bottom: 0;
+  }
+  .champ-fits .champ-node {
+    margin-top: 0;
+  }
+  .champ-fits .champ-match:not(:last-child)::after {
+    left: 36px;
+    right: -6px;
+    top: 13px;
+    bottom: auto;
+    border-left: 0;
+    border-top: 2px dashed var(--line);
+  }
+  .champ-fits .champ-match.is-done:not(:last-child)::after {
+    border-top-style: solid;
+    border-color: var(--ink);
+  }
+  .champ-fits .champ-card {
+    height: 100%;
+    align-content: start;
+  }
+}
+/* In-play header chip that opens the series. */
+.series-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  font-weight: 700;
+}
+.series-chip:hover {
+  border-color: var(--ink);
+}
+.series-chip:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.multiplayer-main .game-context .series-chip.context-meta {
+  display: inline-flex;
+}
+@media (max-width: 440px) {
+  .series-chip {
+    padding: 0 8px;
+    font-size: 11px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .champ-pulse::after {
+    animation: none;
+  }
+}

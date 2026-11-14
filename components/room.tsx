@@ -12,6 +12,7 @@ import {
   LogOut,
   Share2,
   SkipForward,
+  Trophy,
   UserRound,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -41,6 +42,7 @@ import {
   Standings,
   teamName,
 } from "./room-players";
+import { ChampionshipTrack, seriesLabel } from "./championship";
 import { WordPlay } from "./word-play";
 import { RacePlay } from "./race-play";
 import { TopNav } from "./navigation";
@@ -166,6 +168,7 @@ export default function RoomClient({ code }: { code: string }) {
   const [copied, setCopied] = useState("");
   const [showRules, setShowRules] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [showSeries, setShowSeries] = useState(false);
   const [managing, setManaging] = useState<Player | null>(null);
   const [removed, setRemoved] = useState(false);
   const busyRef = useRef(false);
@@ -717,6 +720,9 @@ export default function RoomClient({ code }: { code: string }) {
                   </h1>
                   <span>{MODES[room.config.mode].label}</span>
                 </div>
+                {championship && (room.match ?? 0) > 0 && (
+                  <ChampionshipTrack room={room} />
+                )}
                 <div className="lobby-code">
                   <span>Share this code</span>
                   <button
@@ -893,12 +899,6 @@ export default function RoomClient({ code }: { code: string }) {
                     </p>
                   )}
                 </div>
-                {championship && room.matches?.length ? (
-                  <details className="match-details">
-                    <summary>Championship</summary>
-                    <ChampionshipStandings room={room} />
-                  </details>
-                ) : null}
               </section>
             ) : (
               <section
@@ -912,9 +912,14 @@ export default function RoomClient({ code }: { code: string }) {
                       <span className="context-meta">Spectating</span>
                     )}
                     {championship && (
-                      <span className="context-meta">
-                        Match {(room.match ?? 0) + 1}/{room.config.matches}
-                      </span>
+                      <button
+                        className="context-meta series-chip"
+                        aria-haspopup="dialog"
+                        onClick={() => setShowSeries(true)}
+                      >
+                        <Trophy size={13} aria-hidden="true" />
+                        {seriesLabel(room)}
+                      </button>
                     )}
                   </div>
                   <div>
@@ -1001,6 +1006,7 @@ export default function RoomClient({ code }: { code: string }) {
                         Share
                       </button>
                     </FinalLeaderboard>
+                    {championship && <ChampionshipTrack room={room} />}
                     <details className="match-details">
                       <summary>
                         {championship ? "Matches & rounds" : "Rounds"}
@@ -1100,7 +1106,11 @@ export default function RoomClient({ code }: { code: string }) {
                         key={`${room.match ?? 0}:${room.round}`}
                         guesses={current?.guesses ?? []}
                         playable={
-                          playable && !showRules && !confirmLeave && !managing
+                          playable &&
+                          !showRules &&
+                          !showSeries &&
+                          !confirmLeave &&
+                          !managing
                         }
                         busy={busy}
                         showLetters={!roundDone && !spectator}
@@ -1172,6 +1182,11 @@ export default function RoomClient({ code }: { code: string }) {
       {showRules && (
         <Modal title="How to play" close={() => setShowRules(false)}>
           <Rules />
+        </Modal>
+      )}
+      {showSeries && room && (
+        <Modal title="Championship" close={() => setShowSeries(false)}>
+          <ChampionshipTrack room={room} headless />
         </Modal>
       )}
       {managing && room && (
