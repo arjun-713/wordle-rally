@@ -91,7 +91,10 @@ export type Room = {
   bannedIps?: string[];
   spectators?: { id: string; name: string }[];
 };
-export type PublicRoom = Omit<Room, "rounds"> & {
+export type PublicRoom = Omit<
+  Room,
+  "rounds" | "ips" | "bannedIps" | "banned"
+> & {
   me: string;
   serverTime: number;
   storage: "local" | "redis";

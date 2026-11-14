@@ -174,3 +174,37 @@ test("a full 16-player free-for-all accepts concurrent joins and solves without 
     16,
   );
 });
+
+test("room views never expose player IPs or ban lists", async () => {
+  const host = randomUUID(),
+    friend = randomUUID(),
+    rival = randomUUID(),
+    watcher = randomUUID();
+  const room = await createRoom(host, {
+    config: { mode: "free", players: 3, rounds: 1, seconds: 30 },
+    name: "Host",
+  });
+  await roomAction(room.code, friend, {
+    action: "join",
+    name: "Friend",
+    ip: "203.0.113.7",
+  });
+  await roomAction(room.code, rival, {
+    action: "join",
+    name: "Rival",
+    ip: "198.51.100.9",
+  });
+  await roomAction(room.code, watcher, { action: "spectate", name: "Watcher" });
+  await roomAction(room.code, host, { action: "ban", target: rival });
+  const stored = await secret(room.code);
+  assert.equal(stored.ips?.[friend], "203.0.113.7");
+  assert.deepEqual(stored.bannedIps, ["198.51.100.9"]);
+  for (const viewer of [host, friend, watcher]) {
+    const view = await roomAction(room.code, viewer);
+    const raw = JSON.stringify(view);
+    assert.ok(!raw.includes("203.0.113.7"), "player IP leaked");
+    assert.ok(!raw.includes("198.51.100.9"), "banned IP leaked");
+    for (const field of ["ips", "bannedIps", "banned"])
+      assert.ok(!(field in view), `${field} leaked`);
+  }
+});
