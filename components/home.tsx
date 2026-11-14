@@ -3,9 +3,10 @@ import { useEffect, useState } from "react";
 import { ArrowRight, ArrowUpRight, CircleHelp, Hash, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MODES, type Config, type Mode, type PublicRoom } from "@/lib/types";
+import type { Config, PublicRoom } from "@/lib/types";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
 import { TopNav } from "./navigation";
+import { defaultConfig, finalConfig, RoomConfigFields } from "./room-config";
 
 const preview = [
   {
@@ -23,19 +24,10 @@ const preview = [
 ];
 export default function Home() {
   const router = useRouter();
-  const [mode, setMode] = useState<Mode>("duel");
   const [panel, setPanel] = useState<"create" | "join" | "rules" | null>(null);
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [players, setPlayers] = useState(4),
-    [rounds, setRounds] = useState(5),
-    [seconds, setSeconds] = useState(90);
-  const [scoring, setScoring] = useState<"classic" | "bonus">("classic");
-  const [difficulty, setDifficulty] = useState<
-    "familiar" | "challenging" | "mixed"
-  >("mixed");
-  const [matches, setMatches] = useState(1),
-    [autoAdvance, setAutoAdvance] = useState(false),
+  const [config, setConfig] = useState<Config>(defaultConfig),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   useEffect(() => {
@@ -56,21 +48,12 @@ export default function Home() {
     setBusy(true);
     try {
       saveName(name);
-      const race = mode === "race";
-      const config: Config = {
-        mode,
-        players: mode === "duel" ? 2 : mode === "teams" ? 4 : players,
-        rounds,
-        // Fast Fingers runs on an elapsed race clock with bonus scoring.
-        seconds: race ? 0 : seconds,
-        scoring: race ? "bonus" : scoring,
-        difficulty,
-        matches: race ? 1 : matches,
-        autoAdvance: race ? false : autoAdvance,
-      };
       const room =
         panel === "create"
-          ? await api<PublicRoom>("/api/rooms", { name, config })
+          ? await api<PublicRoom>("/api/rooms", {
+              name,
+              config: finalConfig(config),
+            })
           : await api<PublicRoom>(`/api/rooms/${code.toUpperCase()}`, {
               action: "join",
               name,
@@ -231,162 +214,7 @@ export default function Home() {
                   />
                 </label>
               ) : (
-                <>
-                  <fieldset>
-                    <legend>Mode</legend>
-                    <div className="segmented">
-                      {(Object.keys(MODES) as Mode[]).map((key) => (
-                        <button
-                          key={key}
-                          type="button"
-                          aria-pressed={mode === key}
-                          onClick={() => setMode(key)}
-                        >
-                          {MODES[key].label}
-                        </button>
-                      ))}
-                    </div>
-                  </fieldset>
-                  <div className="form-grid">
-                    <label>
-                      Players
-                      <select
-                        value={
-                          mode === "duel" ? 2 : mode === "teams" ? 4 : players
-                        }
-                        disabled={mode !== "free" && mode !== "race"}
-                        onChange={(event) =>
-                          setPlayers(Number(event.target.value))
-                        }
-                      >
-                        {Array.from({ length: 15 }, (_, index) => (
-                          <option key={index} value={index + 2}>
-                            {index + 2}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      {mode === "race" ? "Words" : "Rounds"}
-                      <select
-                        value={rounds}
-                        onChange={(event) =>
-                          setRounds(Number(event.target.value))
-                        }
-                      >
-                        {Array.from({ length: 20 }, (_, index) => (
-                          <option key={index} value={index + 1}>
-                            {index + 1}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="form-grid">
-                    <label>
-                      Timer
-                      <select
-                        value={mode === "race" ? 0 : seconds}
-                        disabled={mode === "race"}
-                        onChange={(event) =>
-                          setSeconds(Number(event.target.value))
-                        }
-                      >
-                        {[0, 30, 60, 90, 120, 180, 300].map((value) => (
-                          <option key={value} value={value}>
-                            {value === 0
-                              ? mode === "race"
-                                ? "Race clock"
-                                : "None"
-                              : value < 120
-                                ? `${value} sec`
-                                : `${value / 60} min`}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label>
-                      Scoring
-                      <select
-                        value={mode === "race" ? "bonus" : scoring}
-                        disabled={mode === "race"}
-                        onChange={(event) =>
-                          setScoring(event.target.value as typeof scoring)
-                        }
-                      >
-                        <option value="classic">Classic · 1 pt</option>
-                        <option value="bonus">Bonus · 6–1 pts</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="form-grid">
-                    <label>
-                      Difficulty
-                      <select
-                        value={difficulty}
-                        onChange={(event) =>
-                          setDifficulty(event.target.value as typeof difficulty)
-                        }
-                      >
-                        <option value="familiar">Familiar</option>
-                        <option value="challenging">Challenging</option>
-                        <option value="mixed">Mixed</option>
-                      </select>
-                    </label>
-                    <label>
-                      Format
-                      <select
-                        value={
-                          matches === 1 || mode === "race"
-                            ? "single"
-                            : "championship"
-                        }
-                        disabled={mode === "race"}
-                        onChange={(event) =>
-                          setMatches(event.target.value === "single" ? 1 : 3)
-                        }
-                      >
-                        <option value="single">One match</option>
-                        <option value="championship">Championship</option>
-                      </select>
-                    </label>
-                  </div>
-                  {mode === "race" ? (
-                    <p className="form-note">
-                      Same words for everyone, any order. Score is half points,
-                      half speed.
-                    </p>
-                  ) : (
-                    <label className="checkbox-row">
-                      <input
-                        type="checkbox"
-                        checked={autoAdvance}
-                        onChange={(event) =>
-                          setAutoAdvance(event.target.checked)
-                        }
-                      />
-                      Auto-advance rounds
-                    </label>
-                  )}
-                  {matches > 1 && mode !== "race" && (
-                    <label>
-                      Matches
-                      <select
-                        value={matches}
-                        onChange={(event) =>
-                          setMatches(Number(event.target.value))
-                        }
-                      >
-                        {Array.from({ length: 9 }, (_, index) => (
-                          <option key={index} value={index + 2}>
-                            {index + 2}
-                          </option>
-                        ))}
-                      </select>
-                      <small>Points carry over between matches.</small>
-                    </label>
-                  )}
-                </>
+                <RoomConfigFields value={config} onChange={setConfig} />
               )}
               {error && (
                 <p className="error-message" role="alert">

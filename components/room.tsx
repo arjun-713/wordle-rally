@@ -10,6 +10,7 @@ import {
   Link2,
   LoaderCircle,
   LogOut,
+  Settings2,
   Share2,
   SkipForward,
   UserRound,
@@ -24,7 +25,7 @@ import {
   isRetryableActionError,
   newRequestId,
 } from "@/lib/client-api";
-import type { Player, PublicRoom, RoomSyncReply } from "@/lib/types";
+import type { Config, Player, PublicRoom, RoomSyncReply } from "@/lib/types";
 import { MODES } from "@/lib/types";
 import { pointsForGuess } from "@/lib/scoring";
 import {
@@ -45,6 +46,7 @@ import { WordPlay } from "./word-play";
 import { RacePlay } from "./race-play";
 import { TopNav } from "./navigation";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
+import { finalConfig, RoomConfigFields, sameConfig } from "./room-config";
 const ACTION_TIMEOUT_MS = 8000;
 const GUESS_TIMEOUT_MS = 7000;
 const POLL_TIMEOUT_MS = 8000;
@@ -138,6 +140,8 @@ function actionApplied(room: PublicRoom, data: Record<string, unknown>) {
           (player) => player.id === String(data.target) && player.active,
         ) || !!room.banVotes?.[String(data.target)]?.includes(room.me)
       );
+    case "configure":
+      return sameConfig(room.config, data.config as Config);
     case "leave":
       return !room.players.some(
         (player) => player.id === room.me && player.active,
@@ -167,6 +171,7 @@ export default function RoomClient({ code }: { code: string }) {
   const [showRules, setShowRules] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [managing, setManaging] = useState<Player | null>(null);
+  const [settings, setSettings] = useState<Config | null>(null);
   const [removed, setRemoved] = useState(false);
   const busyRef = useRef(false);
   const currentRef = useRef<PublicRoom | null>(null);
@@ -766,7 +771,59 @@ export default function RoomClient({ code }: { code: string }) {
                     {room.config.difficulty ?? "mixed"} words
                   </span>
                   {championship && <span>{room.config.matches} matches</span>}
+                  {room.config.autoAdvance && <span>Auto-advance</span>}
                 </div>
+                {host && (room.match ?? 0) === 0 && (
+                  <button
+                    className="text-button lobby-edit"
+                    disabled={busy}
+                    onClick={() => {
+                      setError("");
+                      setSettings({ ...room.config });
+                    }}
+                  >
+                    <Settings2 size={16} />
+                    Edit settings
+                  </button>
+                )}
+                {settings && (
+                  <Modal
+                    title="Room settings"
+                    close={() => {
+                      if (busy) return;
+                      setSettings(null);
+                      setError("");
+                    }}
+                    wide
+                  >
+                    <form
+                      className="setup-form"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        void action({
+                          action: "configure",
+                          config: finalConfig(settings),
+                        }).then((next) => {
+                          if (next) setSettings(null);
+                        });
+                      }}
+                    >
+                      <RoomConfigFields
+                        value={settings}
+                        onChange={setSettings}
+                        minPlayers={room.players.length}
+                      />
+                      {error && (
+                        <p className="error-message" role="alert">
+                          {error}
+                        </p>
+                      )}
+                      <button className="button primary full" disabled={busy}>
+                        {busy ? "Saving…" : "Save settings"}
+                      </button>
+                    </form>
+                  </Modal>
+                )}
                 <div className="lobby-roster-heading">
                   <h2>Players</h2>
                   <span>

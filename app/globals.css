@@ -2654,3 +2654,24 @@ button.standing-menu:hover {
 .join-gate > p {
   text-wrap: balance;
 }
+
+/* ---------- Room settings ---------- */
+.lobby-edit {
+  display: flex;
+  margin: -18px auto 14px;
+}
+/* Labels are grid by default; keep checkbox rows on one line with the box
+   first, and keep long option text (e.g. "Bonus · 6–1 pts") clear of the
+   select arrow on phones. */
+.checkbox-row {
+  justify-content: flex-start;
+}
+.checkbox-row input {
+  flex: none;
+}
+@media (max-width: 440px) {
+  .setup-form select {
+    padding-left: 10px;
+    padding-right: 4px;
+  }
+}

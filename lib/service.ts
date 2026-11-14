@@ -2,7 +2,13 @@ import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { pools } from "./words";
 import { parseStats, recordPuzzle, statsKey } from "./stats";
 import guesses from "@/data/guesses.json";
-import type { PublicRoom, Room, RoundResult, StatsBook } from "./types";
+import {
+  MODES,
+  type PublicRoom,
+  type Room,
+  type RoundResult,
+  type StatsBook,
+} from "./types";
 import {
   begin,
   cleanName,
@@ -274,6 +280,7 @@ export async function roomAction(
             "spectate",
             "spectator",
             "watch",
+            "configure",
           ].includes(action),
         "Unknown room action.",
       );
@@ -455,7 +462,36 @@ export async function roomAction(
         }
       };
       await recordFinished();
-      if (action === "start") {
+      if (action === "configure") {
+        requireGame(
+          room.host === id,
+          "Only the host can change settings.",
+          403,
+        );
+        requireGame(
+          room.status === "lobby" && (room.match ?? 0) === 0,
+          "Settings are locked once the game starts",
+          409,
+        );
+        // No revision check: the host is the only editor, so a join while the
+        // form is open must not block the save.
+        const config = validateConfig(input.config);
+        const joined = room.players.length;
+        if (config.mode === "duel" || config.mode === "teams")
+          requireGame(
+            joined <= config.players,
+            `${joined} players have joined. ${MODES[config.mode].label} is for ${config.players}.`,
+          );
+        requireGame(
+          joined <= config.players,
+          `${joined} players have joined. Keep at least ${joined} seats.`,
+        );
+        if (config.mode === "teams" && room.config.mode !== "teams")
+          room.players.forEach((p, index) => {
+            p.team = index % 2;
+          });
+        room.config = config;
+      } else if (action === "start") {
         requireGame(
           room.host === id,
           "Only the host can start the match.",
