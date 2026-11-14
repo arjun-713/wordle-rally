@@ -2453,7 +2453,9 @@ button.standing-menu:hover {
   .standing {
     flex: none;
     scroll-snap-align: start;
-    width: 172px;
+    /* Exactly two cards across a phone; the rest scroll. */
+    width: calc((100% - 6px) / 2);
+    min-width: 150px;
     grid-template-columns: auto minmax(0, 1fr) auto;
     grid-template-areas:
       "ghost name score"
