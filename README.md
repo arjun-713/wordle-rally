@@ -25,12 +25,16 @@ Play at **[wordle-rally.vercel.app](https://wordle-rally.vercel.app)**.
 
 ## Hosting on the free Redis tier
 
-Rooms live in Upstash Redis, whose free tier allows 500,000 commands a month. Polling for rivals' progress is most of that, so the app spends it carefully:
+Rooms live in Upstash Redis, whose free tier allows 500,000 commands a month. The app is tuned for about 200 four-player games a month, with 500 as the worst case.
 
 - **Guesses** cost about one command. A server instance starts a guess from its latest copy of the room, and the write only lands if that copy is still current. If it isn't, Redis returns the current room in the same reply, so retries need no extra read.
 - **Polls** read Redis directly with a 2-second timeout. Players polling the same room on one server instance share a single read, reused for 1.5 seconds (`RALLY_ROOM_REUSE_MS`).
-- **Poll timing** follows the game: every 2.5s in a live round, slowing to 3.5s after 30 quiet seconds and 8s after 2 idle minutes. Lobbies poll every 3s, then 8s and 15s. Hidden tabs stop polling. Values are in `lib/room-polling.ts`.
+- **Poll timing** follows the game: every 2.7s in a live round (4s after 30 quiet seconds, 8s after 2 idle minutes) and every 2s between rounds. Lobbies poll every 4s, then 10s and 20s. Hidden tabs stop polling. Values are in `lib/room-polling.ts`.
 
-Rough budget for a 4-player, 5-round game (about 10 minutes including the lobby): 500–1,200 commands, depending on how often players share a server instance. That's roughly **400–1,000 four-player games a month** (about 13–33 a day) on the free tier.
+| Month                                  | Worst case (no shared reads) | Share of free tier |
+| -------------------------------------- | ---------------------------- | ------------------ |
+| 1 four-player game (5 rounds, ~10 min) | ~950 commands                | —                  |
+| 200 four-player + 10 six-player games  | ~205,000                     | ~41%               |
+| 500 four-player + 10 six-player games  | ~490,000                     | ~98%               |
 
-For the lowest latency, keep the Upstash database in the same region as the Vercel functions (`bom1`, Mumbai, in `vercel.json`).
+Real games use less, because players on the same server instance share reads. The model is in `lib/redis-budget.ts`, and `tests/redis-budget.test.ts` fails if a change pushes the worst month over the limit.

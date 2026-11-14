@@ -6,13 +6,15 @@ import type { PublicRoom } from "./types";
 // progress and host-driven changes. `quietFor` is how long the room has gone
 // without a new revision, so idle rooms slow down and busy ones stay snappy.
 export const POLL = {
-  live: 2500, // a round or race with recent activity
-  liveQuiet: 3500, // no changes for 30s
+  // Tuned for ~200 four-player games a month with 500 as the worst case; see
+  // lib/redis-budget.ts and its test before making these faster.
+  live: 2700, // a round or race with recent activity
+  liveQuiet: 4000, // no changes for 30s
   idle: 8000, // no changes for 2 minutes: players likely away
   roundOver: 2000, // waiting for the host or auto-advance
-  lobby: 3000,
-  lobbyQuiet: 8000,
-  lobbyIdle: 15000,
+  lobby: 4000, // joins and the start only need to show up within seconds
+  lobbyQuiet: 10000,
+  lobbyIdle: 20000,
   finished: 5000,
   finishedIdle: 15000,
   retryMax: 4000,
