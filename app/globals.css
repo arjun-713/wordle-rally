@@ -22,7 +22,7 @@
   --control: #879180;
   --radius: 6px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --tile-size: clamp(42px, min(8dvh, 12.8vw), 62px);
+  --tile-size: clamp(40px, min(8.4dvh, calc((100vw - 52px) / 5)), 62px);
   --tile-gap: 5px;
   --stage-width: 560px;
   color-scheme: light;
@@ -127,9 +127,12 @@ input {
   caret-color: var(--ink);
 }
 .app-shell {
+  --gutter: 40px;
   width: min(1280px, 100%);
   margin-inline: auto;
-  padding-inline: 40px;
+  padding: env(safe-area-inset-top)
+    max(var(--gutter), env(safe-area-inset-right)) 0
+    max(var(--gutter), env(safe-area-inset-left));
   min-height: 100dvh;
 }
 .top-nav {
@@ -166,6 +169,7 @@ input {
   white-space: nowrap;
 }
 .nav-action {
+  min-width: 44px;
   padding: 0 8px;
 }
 .icon-button {
@@ -479,6 +483,18 @@ legend {
   display: flex;
   width: 100%;
 }
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+.checkbox-row input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--ink);
+}
 .code-input {
   text-transform: uppercase;
   font-variant-numeric: tabular-nums;
@@ -648,10 +664,19 @@ legend {
   line-height: 1.4;
   max-width: 100%;
 }
+.game-stage {
+  /* Fitted above the device keyboard while it is open (see WordPlay). */
+  --tile: max(30px, min(var(--tile-size), var(--tile-fit, 100vw)));
+}
+html[data-keyboard] .game-stage {
+  --tile-fit: calc(
+    (var(--view-height) - var(--keyboard-reserve, 160px)) / 6 - var(--tile-gap)
+  );
+}
 .word-grid-form {
   position: relative;
   margin: 0;
-  width: calc(5 * var(--tile-size) + 4 * var(--tile-gap));
+  width: calc(5 * var(--tile) + 4 * var(--tile-gap));
   max-width: 100%;
   flex: none;
 }
@@ -670,9 +695,9 @@ legend {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--tile-size);
-  height: var(--tile-size);
-  font-size: clamp(23px, 2.1vw, 30px);
+  width: var(--tile, var(--tile-size));
+  height: var(--tile, var(--tile-size));
+  font-size: clamp(18px, calc(var(--tile, var(--tile-size)) * 0.48), 30px);
   font-weight: 800;
   line-height: 1;
   background: var(--paper);
@@ -686,29 +711,23 @@ legend {
   border-color: var(--ink);
   animation: tile-entry 120ms ease-out;
 }
-.tile.correct,
-.key.correct {
+.tile.correct {
   background: var(--correct);
   color: var(--paper);
   border-color: var(--correct);
   border-bottom-color: color-mix(in srgb, var(--correct), var(--deep) 25%);
 }
-.tile.present,
-.key.present {
+.tile.present {
   background: var(--present);
   color: var(--ink);
   border-color: var(--present);
   border-bottom-color: color-mix(in srgb, var(--present), var(--deep) 20%);
 }
-.tile.absent,
-.key.absent {
+.tile.absent {
   background: var(--absent);
   color: var(--paper);
   border-color: var(--absent);
   border-bottom-color: color-mix(in srgb, var(--absent), var(--deep) 20%);
-}
-.key.absent {
-  color: var(--key-ink);
 }
 .tile.revealed {
   animation: tile-reveal 340ms var(--ease) both;
@@ -725,58 +744,124 @@ legend {
 .grid-input {
   position: absolute;
   left: 0;
-  top: calc(var(--active-row) * (var(--tile-size) + var(--tile-gap)));
+  top: calc(var(--active-row) * (var(--tile) + var(--tile-gap)));
   width: 100%;
-  height: var(--tile-size);
+  height: var(--tile);
   opacity: 0;
   border: 0;
   padding: 0;
   font-size: 16px;
+  color: transparent;
+  caret-color: transparent;
+  background: transparent;
   cursor: text;
 }
-.keyboard {
-  width: min(100%, 500px);
+.keyboard-keeper {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  border: 0;
+  padding: 0;
+  font-size: 16px;
+  pointer-events: none;
+}
+/* A caret in the next empty tile while the board has focus. */
+.word-grid-form:focus-within .next-cell::after {
+  content: "";
+  width: 2px;
+  height: 42%;
+  border-radius: 1px;
+  background: var(--ink);
+  animation: caret-blink 1s steps(1) infinite;
+}
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+/* Touch screens: tapping the board opens the device keyboard. */
+@media (hover: none) {
+  .word-board {
+    cursor: text;
+  }
+  .word-grid-form.idle .current-row::after {
+    content: "Tap to type";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 12px;
+    font-weight: 800;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+}
+/* Used letters at a glance, in place of an on-screen keyboard. */
+.letter-tracker {
+  position: relative;
+  width: calc(5 * var(--tile) + 4 * var(--tile-gap));
+  max-width: 100%;
+}
+.letter-tracker ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: grid;
-  gap: 6px;
-  margin-top: 4px;
+  grid-template-columns: repeat(13, minmax(0, 1fr));
+  gap: 3px;
   user-select: none;
 }
-.keyboard-row {
+.letter-tracker li {
   display: flex;
-  justify-content: center;
-  gap: 5px;
-}
-.key {
-  display: flex;
-  justify-content: center;
   align-items: center;
-  flex: 1;
-  min-width: 0;
-  height: 46px;
+  justify-content: center;
+  height: clamp(22px, calc(var(--tile) * 0.44), 28px);
+  border-radius: 4px;
   background: var(--key);
-  border: 1px solid transparent;
-  border-bottom: 3px solid var(--line);
-  border-radius: 5px;
+  font-size: clamp(11px, calc(var(--tile) * 0.2), 12px);
+  font-weight: 800;
+  line-height: 1;
+  transition:
+    background 200ms ease,
+    color 200ms ease;
+}
+.letter-tracker li.correct {
+  background: var(--correct);
+  color: var(--paper);
+}
+.letter-tracker li.present {
+  background: var(--present);
+  color: var(--ink);
+}
+.letter-tracker li.absent {
+  background: transparent;
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1.5px;
+}
+.row-message {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  max-width: 100%;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
   font-size: 13px;
   font-weight: 800;
-  padding: 0;
-  transition: transform 100ms ease;
-}
-.key.wide-key {
-  flex: 1.5;
-  font-size: 11px;
-}
-.keyboard-row:nth-child(2) {
-  padding-inline: 18px;
-}
-.key:active:not(:disabled) {
-  transform: translateY(1px);
-}
-.key:hover:not(:disabled) {
-  filter: brightness(0.95);
-}
-.key:disabled {
-  cursor: default;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .board-legend {
   display: flex;
@@ -794,9 +879,9 @@ legend {
   white-space: nowrap;
 }
 .board-legend i {
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
 }
 .board-legend .correct {
   background: var(--correct);
@@ -1022,14 +1107,14 @@ legend {
   color: var(--muted);
 }
 .multiplayer-main .game-stage {
-  --tile-size: clamp(42px, min(6.5dvh, 12.8vw), 62px);
+  --tile-size: clamp(38px, min(7.2dvh, calc((100vw - 52px) / 5)), 60px);
   gap: 10px;
 }
-/* Short laptop viewports still need the whole board and keyboard above the
-   fold now that the round controls sit above them. */
+/* Short laptop viewports keep the whole board above the fold under the
+   round controls. */
 @media (min-width: 601px) and (max-height: 820px) {
   .multiplayer-main .game-stage {
-    --tile-size: clamp(40px, min(5.8dvh, 12.8vw), 62px);
+    --tile-size: clamp(38px, 7dvh, 60px);
   }
 }
 .compact-room-code {
@@ -1330,7 +1415,7 @@ tbody tr + tr {
 @media (min-width: 1500px) {
   .app-shell {
     width: min(1440px, 100%);
-    padding-inline: 56px;
+    --gutter: 56px;
   }
   .home-hub {
     gap: 88px;
@@ -1351,7 +1436,7 @@ tbody tr + tr {
 }
 @media (max-width: 1000px) {
   .app-shell {
-    padding-inline: 28px;
+    --gutter: 28px;
   }
   .home-hub {
     gap: 32px;
@@ -1379,7 +1464,7 @@ tbody tr + tr {
 }
 @media (max-width: 700px) {
   .app-shell {
-    padding-inline: 20px;
+    --gutter: 16px;
   }
   .top-nav {
     height: 64px;
@@ -1461,20 +1546,14 @@ tbody tr + tr {
   .play-shell {
     --nav-height: 56px;
   }
+  /* Phones: the board sits high so the device keyboard has room below. */
   .play-main {
+    justify-content: flex-start;
+    padding-top: 4px;
     padding-bottom: max(12px, env(safe-area-inset-bottom));
   }
   .game-context h1 {
     font-size: 18px;
-  }
-  .keyboard {
-    max-width: 480px;
-  }
-  .key {
-    height: 44px;
-  }
-  .tile {
-    font-size: 25px;
   }
   .grid-input {
     pointer-events: none;
@@ -1579,7 +1658,7 @@ tbody tr + tr {
 }
 @media (max-width: 360px) {
   .app-shell {
-    padding-inline: 16px;
+    --gutter: 16px;
   }
   .logo {
     font-size: 23px;
@@ -1622,23 +1701,6 @@ tbody tr + tr {
   .game-status {
     min-height: 20px;
     font-size: 12px;
-  }
-  .keyboard {
-    gap: 5px;
-    margin-top: 2px;
-  }
-  .keyboard-row {
-    gap: 4px;
-  }
-  .keyboard-row:nth-child(2) {
-    padding-inline: 12px;
-  }
-  .key {
-    font-size: 12px;
-  }
-  .key.wide-key {
-    font-size: 11px;
-    flex: 1.55;
   }
   .board-legend {
     gap: 12px;
@@ -1712,8 +1774,7 @@ tbody tr + tr {
     animation: none !important;
     transition: none !important;
   }
-  .button:active:not(:disabled),
-  .key:active:not(:disabled) {
+  .button:active:not(:disabled) {
     transform: none;
   }
 }
@@ -2546,4 +2607,12 @@ button.standing-menu:hover {
   .race-dot.solved {
     animation: none;
   }
+}
+.lobby-difficulty::first-letter {
+  text-transform: uppercase;
+}
+.hub-copy > p,
+.final-head p,
+.join-gate > p {
+  text-wrap: balance;
 }

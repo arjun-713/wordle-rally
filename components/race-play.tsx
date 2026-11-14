@@ -121,7 +121,7 @@ export function RacePlay({
       <div className="play-column">
         <div className="round-bar race-bar">
           <span className="round-label">
-            <strong>{own?.points ?? 0}</strong> bonus pts
+            <strong>{own?.points ?? 0}</strong> pts
           </span>
           <strong
             className={`match-clock ${closesIn !== null && closesIn <= 15000 ? "urgent" : ""}`}
@@ -188,22 +188,22 @@ export function RacePlay({
         </div>
         <div className="game-status" role="status" aria-live="polite">
           {spectator
-            ? "You’re watching this race"
+            ? "Spectating"
             : busy
-              ? "Checking your guess…"
+              ? "Checking…"
               : own?.elapsed != null
-                ? `All words solved in ${time(own.elapsed, true)} · race closes in ${Math.ceil((closesIn ?? 0) / 1000)}s`
+                ? `Done in ${time(own.elapsed, true)} · closes in ${Math.ceil((closesIn ?? 0) / 1000)}s`
                 : closesIn !== null && !closed
                   ? `Someone finished · ${Math.ceil(closesIn / 1000)}s left`
                   : word.solved
-                    ? `Word ${selected + 1} solved in ${word.guesses.length}/6 · +${7 - word.guesses.length} points`
+                    ? `Solved in ${word.guesses.length}/6 · +${7 - word.guesses.length} pts`
                     : word.exhausted
-                      ? "Word wasted · no points, and no finishing time"
-                      : `Word ${selected + 1} of ${race.words.length} · skip and come back any time`}
+                      ? "Out of guesses on this word"
+                      : `Word ${selected + 1} of ${race.words.length}`}
         </div>
         {countdown > 0 && (
           <div className="round-countdown" role="status">
-            Race starts in {countdown}
+            Starting in {countdown}
           </div>
         )}
         <WordPlay
@@ -225,7 +225,8 @@ export function RacePlay({
             !closed && !blocked && countdown === 0 && !spectator && !!me?.active
           }
           busy={busy}
-          showKeyboard={!closed && !spectator}
+          showLetters={!spectator}
+          holdFocus={!spectator}
           onError={onError}
           onGuess={async (value) => {
             const index = selected;
@@ -264,11 +265,11 @@ export function RacePlay({
         />
         {closed && nextOpen === undefined && own?.elapsed == null && (
           <p className="waiting-host">
-            No open words left. The race ends when everyone is done.
+            No open words left. Waiting for others…
           </p>
         )}
         <details className="match-details">
-          <summary>How the 50/50 score works</summary>
+          <summary>Scoring</summary>
           <RaceRules average={race.average} />
         </details>
       </div>
@@ -281,19 +282,15 @@ function RaceRules({ average }: { average: number | null }) {
   return (
     <div className="race-rules">
       <p>
-        Each solve earns 6–1 bonus points for guesses 1–6. Skipped words stay
-        open. A wasted word (six misses) earns nothing and means you can’t post
-        a finishing time.
+        A solve earns 6–1 points (fewer guesses, more points). Six misses wastes
+        the word.
       </p>
       <p>
-        Final score out of 100: up to 50 for points (your bonus points ÷ the
-        maximum) and up to 50 for speed (compared with the average finishing
-        time). Only players who solve every word get a total. The race closes 60
-        seconds after the first player finishes.
+        Score out of 100: 50 for points, 50 for speed against the average time.
+        Solve every word to get one. The race ends 60 seconds after the first
+        finisher.
       </p>
-      {average !== null && (
-        <p>Average finishing time: {time(average, true)}.</p>
-      )}
+      {average !== null && <p>Average time: {time(average, true)}</p>}
     </div>
   );
 }
@@ -356,8 +353,7 @@ function RaceResults({
                 </>
               ) : (
                 <>
-                  You solved {rows[mine].solved}/{race.words.length} words, so
-                  your run has no finishing rank
+                  You solved {rows[mine].solved}/{race.words.length} · no rank
                 </>
               )}
             </p>
@@ -391,8 +387,7 @@ function RaceResults({
                   {row.id === room.me && <small> · you</small>}
                 </strong>
                 <span>
-                  {row.solved}/{race.words.length} solved · {row.points} bonus
-                  pts
+                  {row.solved}/{race.words.length} solved · {row.points} pts
                   {row.elapsed !== null
                     ? ` · ${time(row.elapsed, true)}`
                     : " · incomplete"}
@@ -421,22 +416,20 @@ function RaceResults({
               <ArrowRight size={18} />
             </button>
           ) : (
-            <span className="waiting-host">
-              Waiting for the host to start another race.
-            </span>
+            <span className="waiting-host">Waiting for the host…</span>
           )}
           <button className="button secondary" onClick={onShare}>
             <Share2 size={17} />
-            Share result
+            Share
           </button>
         </div>
       </section>
       <details className="match-details">
-        <summary>Word-by-word breakdown</summary>
+        <summary>Words</summary>
         <MatchBreakdown rounds={room.results} label="Word breakdown" />
       </details>
       <details className="match-details">
-        <summary>How the 50/50 score works</summary>
+        <summary>Scoring</summary>
         <RaceRules average={race.average} />
       </details>
     </>

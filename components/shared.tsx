@@ -86,15 +86,15 @@ export function BoardLegend() {
     <div className="board-legend" aria-label="Letter feedback guide">
       <span>
         <i className="correct" />
-        Correct
+        Right spot
       </span>
       <span>
         <i className="present" />
-        Elsewhere
+        Wrong spot
       </span>
       <span>
         <i className="absent" />
-        Absent
+        Not in word
       </span>
     </div>
   );
@@ -102,46 +102,29 @@ export function BoardLegend() {
 export function Rules() {
   return (
     <div className="rules">
-      <p>
-        Find the five-letter word in six guesses. Enter submits; Backspace
-        deletes.
-      </p>
+      <p>Guess the five-letter word in six tries.</p>
       <BoardLegend />
-      <ul>
-        <li>
-          <strong>Correct:</strong> the right letter in the right place.
-        </li>
-        <li>
-          <strong>Elsewhere:</strong> the letter belongs in another position.
-        </li>
-        <li>
-          <strong>Absent:</strong> no remaining copy of that letter is in the
-          word.
-        </li>
-      </ul>
       <h3>With friends</h3>
-      <p>
-        Everyone gets the same word and their own board. Classic awards 1 point
-        per solve; Guess bonus awards 6–1 points for guesses 1–6. An unsolved
-        word earns no points.
-      </p>
-      <p>
-        Using all six guesses ends your turn. Others keep playing. Team scores
-        add both players’ points. The host starts and advances rounds; tied
-        leaders share the win.
-      </p>
+      <ul>
+        <li>Everyone gets the same word on their own board.</li>
+        <li>
+          Classic: 1 point per solve. Bonus: 6–1 points, fewer guesses = more.
+        </li>
+        <li>The host starts each round. Tied leaders share the win.</li>
+      </ul>
       <h3>Fast Fingers</h3>
+      <ul>
+        <li>Solve a set of words in any order. Skip and come back.</li>
+        <li>
+          Score out of 100: half points, half speed. Solve every word to get
+          one.
+        </li>
+        <li>The race ends 60 seconds after the first finisher.</li>
+      </ul>
+      <h3>Solo</h3>
       <p>
-        Everyone gets the same set of words. Solve them in any order: skip a
-        word and come back later. Each solve earns 6–1 points; six misses wastes
-        the word. Your final score out of 100 is half points and half speed, and
-        only players who solve every word get a total. The race closes 60
-        seconds after the first player finishes.
-      </p>
-      <h3>Solo & daily</h3>
-      <p>
-        Unlimited offers a new puzzle after each result. Daily gives everyone
-        one shared puzzle per UTC day. Neither has a round timer.
+        Unlimited never runs out. Daily is one word for everyone, new at
+        midnight UTC.
       </p>
     </div>
   );

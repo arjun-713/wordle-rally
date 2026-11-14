@@ -82,8 +82,7 @@ export function ChampionshipStandings({ room }: { room: PublicRoom }) {
     <section className="championship-standings">
       <h2>Championship standings</h2>
       <p>
-        {room.matches?.length ?? 0} of {room.config.matches} matches completed ·
-        cumulative points
+        {room.matches?.length ?? 0}/{room.config.matches} matches played
       </p>
       {room.config.mode === "teams" && (
         <div className="team-scoreboard compact">

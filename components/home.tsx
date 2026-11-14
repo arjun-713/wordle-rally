@@ -50,7 +50,7 @@ export default function Home() {
     if (busy) return;
     setError("");
     if (!name.trim()) {
-      setError("Enter your player name.");
+      setError("Add your name first.");
       return;
     }
     setBusy(true);
@@ -88,7 +88,7 @@ export default function Home() {
         home
         settings={
           <label className="setting-field">
-            Player name
+            Your name
             <input
               autoComplete="nickname"
               maxLength={20}
@@ -108,7 +108,7 @@ export default function Home() {
             <br />
             Against theirs.
           </h1>
-          <p>Six guesses. One word. A round with your friends.</p>
+          <p>Same word. Six guesses. Who gets it first?</p>
           <div className="hub-actions">
             <button className="button primary" onClick={() => open("create")}>
               <Plus size={19} />
@@ -126,7 +126,7 @@ export default function Home() {
               <ArrowUpRight size={17} />
             </Link>
             <Link href="/daily">
-              Daily challenge
+              Daily
               <ArrowUpRight size={17} />
             </Link>
             <button onClick={() => open("rules")}>
@@ -134,7 +134,9 @@ export default function Home() {
               How to play
             </button>
           </div>
-          <p className="hub-formats">1v1 · 2v2 · Free-for-all · Fast Fingers</p>
+          <p className="hub-formats">
+            1 vs 1 · 2 vs 2 · 1 vs all · Fast Fingers
+          </p>
         </section>
         <section
           className="match-preview"
@@ -177,12 +179,6 @@ export default function Home() {
               </div>
             ))}
           </div>
-          <div className="preview-footer">
-            <span>Same word. Your own six guesses.</span>
-            <Link href="/unlimited" aria-label="Start a solo puzzle">
-              <ArrowUpRight size={22} />
-            </Link>
-          </div>
         </section>
       </main>
       {panel && (
@@ -202,7 +198,7 @@ export default function Home() {
           ) : (
             <form onSubmit={submit} className="setup-form">
               <label>
-                Your player name
+                Your name
                 <input
                   value={name}
                   onChange={(event) => setName(event.target.value)}
@@ -227,14 +223,17 @@ export default function Home() {
                     minLength={6}
                     maxLength={6}
                     autoComplete="off"
-                    placeholder="Six-character code"
+                    placeholder="6 characters"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
                     required
                   />
                 </label>
               ) : (
                 <>
                   <fieldset>
-                    <legend>Game mode</legend>
+                    <legend>Mode</legend>
                     <div className="segmented">
                       {(Object.keys(MODES) as Mode[]).map((key) => (
                         <button
@@ -250,7 +249,7 @@ export default function Home() {
                   </fieldset>
                   <div className="form-grid">
                     <label>
-                      Number of players
+                      Players
                       <select
                         value={
                           mode === "duel" ? 2 : mode === "teams" ? 4 : players
@@ -262,13 +261,13 @@ export default function Home() {
                       >
                         {Array.from({ length: 15 }, (_, index) => (
                           <option key={index} value={index + 2}>
-                            {index + 2} players
+                            {index + 2}
                           </option>
                         ))}
                       </select>
                     </label>
                     <label>
-                      {mode === "race" ? "Number of words" : "Number of rounds"}
+                      {mode === "race" ? "Words" : "Rounds"}
                       <select
                         value={rounds}
                         onChange={(event) =>
@@ -285,7 +284,7 @@ export default function Home() {
                   </div>
                   <div className="form-grid">
                     <label>
-                      Time per round
+                      Timer
                       <select
                         value={mode === "race" ? 0 : seconds}
                         disabled={mode === "race"}
@@ -298,8 +297,10 @@ export default function Home() {
                             {value === 0
                               ? mode === "race"
                                 ? "Race clock"
-                                : "No time limit"
-                              : `${value} seconds`}
+                                : "None"
+                              : value < 120
+                                ? `${value} sec`
+                                : `${value / 60} min`}
                           </option>
                         ))}
                       </select>
@@ -313,14 +314,14 @@ export default function Home() {
                           setScoring(event.target.value as typeof scoring)
                         }
                       >
-                        <option value="classic">Classic · 1 point</option>
-                        <option value="bonus">Guess bonus · 6–1 points</option>
+                        <option value="classic">Classic · 1 pt</option>
+                        <option value="bonus">Bonus · 6–1 pts</option>
                       </select>
                     </label>
                   </div>
                   <div className="form-grid">
                     <label>
-                      Word difficulty
+                      Difficulty
                       <select
                         value={difficulty}
                         onChange={(event) =>
@@ -329,11 +330,11 @@ export default function Home() {
                       >
                         <option value="familiar">Familiar</option>
                         <option value="challenging">Challenging</option>
-                        <option value="mixed">Random mix</option>
+                        <option value="mixed">Mixed</option>
                       </select>
                     </label>
                     <label>
-                      Match format
+                      Format
                       <select
                         value={
                           matches === 1 || mode === "race"
@@ -345,16 +346,15 @@ export default function Home() {
                           setMatches(event.target.value === "single" ? 1 : 3)
                         }
                       >
-                        <option value="single">Single match</option>
+                        <option value="single">One match</option>
                         <option value="championship">Championship</option>
                       </select>
                     </label>
                   </div>
                   {mode === "race" ? (
                     <p className="form-note">
-                      Everyone races through the same words. Skip and come back
-                      any time; points and speed each count for half of a score
-                      out of 100.
+                      Same words for everyone, any order. Score is half points,
+                      half speed.
                     </p>
                   ) : (
                     <label className="checkbox-row">
@@ -370,7 +370,7 @@ export default function Home() {
                   )}
                   {matches > 1 && mode !== "race" && (
                     <label>
-                      Number of matches
+                      Matches
                       <select
                         value={matches}
                         onChange={(event) =>
@@ -383,10 +383,7 @@ export default function Home() {
                           </option>
                         ))}
                       </select>
-                      <small>
-                        Points carry across matches. Tied leaders share the
-                        title.
-                      </small>
+                      <small>Points carry over between matches.</small>
                     </label>
                   )}
                 </>
@@ -398,7 +395,7 @@ export default function Home() {
               )}
               <button className="button primary full" disabled={busy}>
                 {busy
-                  ? "Opening room…"
+                  ? "Opening…"
                   : panel === "create"
                     ? "Create room"
                     : "Join room"}

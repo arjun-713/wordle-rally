@@ -96,10 +96,10 @@ export default function StatsClient() {
               <div className="distribution-title">
                 <h2>Guess distribution</h2>
                 <span>
-                  {stats.wins} solved ·{" "}
+                  {stats.wins} solved
                   {stats.wins
-                    ? `${(stats.guesses / stats.wins).toFixed(1)} avg`
-                    : "No average yet"}
+                    ? ` · ${(stats.guesses / stats.wins).toFixed(1)} avg`
+                    : ""}
                 </span>
               </div>
               <ol className="guess-distribution">
@@ -119,31 +119,27 @@ export default function StatsClient() {
                 ))}
               </ol>
               {stats.played === 0 && (
-                <p className="stats-empty">
-                  Finish a puzzle to start your record.
-                </p>
+                <p className="stats-empty">No games yet.</p>
               )}
             </section>
             {mode === "multiplayer" && (
               <dl className="match-totals">
                 <div>
-                  <dt>Matches played</dt>
+                  <dt>Matches</dt>
                   <dd>{book.matchesPlayed}</dd>
                 </div>
                 <div>
-                  <dt>Matches won</dt>
+                  <dt>Wins</dt>
                   <dd>{book.matchesWon}</dd>
                 </div>
                 <div>
-                  <dt>Points earned</dt>
+                  <dt>Points</dt>
                   <dd>{book.points}</dd>
                 </div>
               </dl>
             )}
             {mode === "daily" && (
-              <p className="stats-note">
-                Daily streaks count consecutive UTC days solved.
-              </p>
+              <p className="stats-note">Streaks follow UTC days.</p>
             )}
           </>
         )}

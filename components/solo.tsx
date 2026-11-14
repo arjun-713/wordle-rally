@@ -6,7 +6,7 @@ import type { Difficulty, PublicSoloGame } from "@/lib/types";
 import { isGuessRejection } from "@/lib/client-api";
 import { api, Modal, Rules } from "./shared";
 import { TopNav } from "./navigation";
-import { WordPlay } from "./word-play";
+import { holdKeyboard, WordPlay } from "./word-play";
 export default function SoloClient({ daily = false }: { daily?: boolean }) {
   const endpoint = daily ? "/api/daily" : "/api/solo";
   const [level, setLevel] = useState<Difficulty>("mixed");
@@ -143,9 +143,8 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
               >
                 <option value="familiar">Familiar</option>
                 <option value="challenging">Challenging</option>
-                <option value="mixed">Random mix</option>
+                <option value="mixed">Mixed</option>
               </select>
-              <small>Applies to your next puzzle.</small>
             </label>
           )
         }
@@ -153,7 +152,7 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
       <main className="play-main">
         <div className="game-context">
           <div>
-            <h1>{daily ? "Daily challenge" : "Unlimited"}</h1>
+            <h1>{daily ? "Daily" : "Unlimited"}</h1>
             {game && (
               <span className="context-meta">
                 {daily
@@ -183,16 +182,16 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
         {loading ? (
           <div className="game-loading" role="status">
             <LoaderCircle className="spinner" size={22} />
-            <span>Loading puzzle…</span>
+            <span>Loading…</span>
           </div>
         ) : game ? (
           <section className="game-stage" aria-label="Solo puzzle">
             <div className="game-status" role="status" aria-live="polite">
               {pendingGuess ? (
                 checkingSaved ? (
-                  "Checking saved result…"
+                  "Syncing…"
                 ) : (
-                  "Checking your guess…"
+                  "Checking…"
                 )
               ) : finished ? (
                 game.status === "won" ? (
@@ -216,7 +215,7 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
               }
               busy={busy}
               onError={setError}
-              showKeyboard={!finished}
+              showLetters={!finished}
               onGuess={(word) => action({ action: "guess", word })}
             />
             {finished && (
@@ -230,9 +229,14 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
                     <button
                       className="button primary"
                       disabled={busy}
-                      onClick={() => void action({ action: "next" })}
+                      onClick={() => {
+                        // Phones: open the keyboard now (inside the tap) so
+                        // the next board can take it over.
+                        if (matchMedia("(hover: none)").matches) holdKeyboard();
+                        void action({ action: "next" });
+                      }}
                     >
-                      {busy ? "Picking a word…" : "Next word"}
+                      {busy ? "Loading…" : "Next word"}
                       <Shuffle size={18} />
                     </button>
                   ) : (
@@ -244,20 +248,13 @@ export default function SoloClient({ daily = false }: { daily?: boolean }) {
                 </div>
                 {daily && game.resetsAt && (
                   <p className="result-detail">
-                    Next daily in{" "}
+                    Next word in{" "}
                     {new Date(Math.max(0, game.resetsAt - clock))
                       .toISOString()
-                      .slice(11, 19)}{" "}
-                    · midnight UTC
+                      .slice(11, 19)}
                   </p>
                 )}
               </section>
-            )}
-            {daily && !finished && (
-              <details className="daily-details">
-                <summary>About today’s puzzle</summary>
-                <p>One shared word for {game.date}. Resets at midnight UTC.</p>
-              </details>
             )}
           </section>
         ) : (
