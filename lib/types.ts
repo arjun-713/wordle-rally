@@ -13,6 +13,7 @@ export type Config = {
   autoAdvance?: boolean;
 };
 export type Guess = { word: string; marks: Mark[] };
+export type GhostRow = { marks: Mark[] };
 export type SoloStats = {
   played: number;
   wins: number;
@@ -108,6 +109,8 @@ export type PublicRoom = Omit<
     firstSolve?: string;
     skipVotes?: string[];
     answer?: string;
+    // Other players' rows this round, as colour marks only.
+    ghosts?: Record<string, GhostRow[]>;
   } | null;
   results: RoundResult[];
 };

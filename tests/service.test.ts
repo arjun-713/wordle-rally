@@ -208,3 +208,35 @@ test("room views never expose player IPs or ban lists", async () => {
       assert.ok(!(field in view), `${field} leaked`);
   }
 });
+
+test("ghost boards show rivals' colours but never their words", async () => {
+  const { code, ids } = await setup();
+  await roomAction(code, ids[0], { action: "start" });
+  const answer = (await secret(code)).rounds[0].answer;
+  const miss = (guesses as string[]).find((w) => w !== answer)!;
+  await roomAction(code, ids[1], { action: "guess", word: miss, round: 0 });
+  const live = await roomAction(code, ids[0]);
+  const ghost = live.current?.ghosts?.[ids[1]];
+  assert.equal(ghost?.length, 1);
+  assert.equal(ghost?.[0].marks.length, 5);
+  assert.ok(!("word" in (ghost?.[0] ?? {})), "word sent mid-round");
+  assert.ok(
+    !(ids[0] in (live.current?.ghosts ?? {})),
+    "own board is not a ghost",
+  );
+  assert.ok(!JSON.stringify(live).includes(`"${miss}"`), "rival word leaked");
+  await roomAction(code, ids[0], { action: "guess", word: answer, round: 0 });
+  await roomAction(code, ids[1], { action: "guess", word: answer, round: 0 });
+  const ended = await roomAction(code, ids[0]);
+  assert.equal(ended.current?.ended, true);
+  const ghost2 = ended.current?.ghosts?.[ids[1]];
+  assert.equal(ghost2?.length, 2);
+  assert.ok(
+    ghost2?.every((g) => !("word" in g)),
+    "words sent after round end",
+  );
+  assert.ok(
+    !JSON.stringify(ended.current?.ghosts).includes(miss),
+    "rival word leaked after round end",
+  );
+});

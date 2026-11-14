@@ -6,9 +6,12 @@ import {
   CircleHelp,
   Copy,
   Crown,
+  Ellipsis,
   Link2,
   LoaderCircle,
   LogOut,
+  Share2,
+  SkipForward,
   UserRound,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -29,6 +32,15 @@ import {
   ChampionshipStandings,
   tournamentTotals,
 } from "./match-results";
+import {
+  canManage,
+  FinalLeaderboard,
+  kickVotes,
+  ManagePlayer,
+  PlayerAvatar,
+  Standings,
+  teamName,
+} from "./room-players";
 import { WordPlay } from "./word-play";
 import { TopNav } from "./navigation";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
@@ -115,22 +127,6 @@ function formatTime(seconds: number) {
     .toString()
     .padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 }
-function PlayerAvatar({
-  player,
-  index = 0,
-}: {
-  player: Player;
-  index?: number;
-}) {
-  return (
-    <span
-      className={`avatar player-avatar tone-${index % 4}`}
-      aria-hidden="true"
-    >
-      {player.name.slice(0, 2).toUpperCase()}
-    </span>
-  );
-}
 export default function RoomClient({ code }: { code: string }) {
   const router = useRouter();
   const [room, setRoom] = useState<PublicRoom | null>(null);
@@ -146,6 +142,8 @@ export default function RoomClient({ code }: { code: string }) {
   const [copied, setCopied] = useState("");
   const [showRules, setShowRules] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [managing, setManaging] = useState<Player | null>(null);
+  const [removed, setRemoved] = useState(false);
   const busyRef = useRef(false);
   const currentRef = useRef<PublicRoom | null>(null);
   const changedAt = useRef(Date.now());
@@ -231,7 +229,11 @@ export default function RoomClient({ code }: { code: string }) {
         const err = e as Error & { status?: number };
         fatal = err.status === 403 || err.status === 404;
         failures++;
-        if (err.status === 403) setNeedsJoin(true);
+        const wasPlaying = currentRef.current?.players.some(
+          (p) => p.id === currentRef.current?.me,
+        );
+        if (err.status === 403 && wasPlaying) setRemoved(true);
+        else if (err.status === 403) setNeedsJoin(true);
         else if (!currentRef.current) setError(err.message);
         // One missed poll is normal on mobile networks. Keep the board open
         // and only warn once repeated attempts have failed.
@@ -495,15 +497,43 @@ export default function RoomClient({ code }: { code: string }) {
     room?.config.mode === "teams"
       ? teamScores[0] === teamScores[1]
         ? "The teams are tied!"
-        : `${teamScores[0] > teamScores[1] ? "Green" : "Gold"} team wins!`
+        : `${teamName(teamScores[0] > teamScores[1] ? 0 : 1)} team wins!`
       : winners.length === 1
         ? `${winners[0].name} wins!`
         : topScore === 0
           ? "No points awarded"
           : "A shared victory!";
-  const rival = room?.players.find((player) => player.id !== room.me);
-  const fieldLeader = sorted.find((player) => player.id !== room?.me);
   const roundDone = !!current?.ended || room?.status === "finished";
+  const skipNeeded =
+    Math.floor((room?.players.filter((p) => p.active).length ?? 0) / 2) + 1;
+  function shareResult() {
+    if (!room) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 640;
+    canvas.height = 140 + sorted.length * 30;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.fillStyle = "#F6F3E9";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#17211D";
+    ctx.font = "bold 28px sans-serif";
+    ctx.fillText("Word Rally", 24, 42);
+    ctx.font = "16px sans-serif";
+    ctx.fillText(
+      `Room ${room.code} · ${room.config.rounds} rounds · ${MODES[room.config.mode].label}`,
+      24,
+      70,
+    );
+    let y = 110;
+    sorted.forEach((player, i) => {
+      ctx.fillText(`${i + 1}. ${player.name} — ${player.score} pts`, 24, y);
+      y += 30;
+    });
+    const link = document.createElement("a");
+    link.download = `word-rally-${room.code}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  }
   const earned =
     room && solved
       ? pointsForGuess(room.config, current?.guesses.length ?? 0)
@@ -537,6 +567,15 @@ export default function RoomClient({ code }: { code: string }) {
             <h1>Opening room</h1>
             <span>{code}</span>
           </div>
+        ) : removed ? (
+          <section className="join-gate">
+            <h1>You’re no longer in this room</h1>
+            <p>The host or the other players removed you from room {code}.</p>
+            <Link href="/" className="button primary">
+              Choose a mode
+              <ArrowRight size={18} />
+            </Link>
+          </section>
         ) : !room ? (
           <section className="join-gate">
             <h1>{needsJoin ? "Join the room" : "Room unavailable"}</h1>
@@ -581,9 +620,9 @@ export default function RoomClient({ code }: { code: string }) {
               Choose a mode
             </Link>
           </section>
-        ) : !me?.active ? (
+        ) : !me?.active && !spectator ? (
           <section className="join-gate">
-            <h1>You left this match</h1>
+            <h1>You’re out of this match</h1>
             <p>Room {room.code}</p>
             <Link href="/" className="button primary">
               Choose a mode
@@ -674,7 +713,7 @@ export default function RoomClient({ code }: { code: string }) {
                       <li key={player?.id ?? `seat-${index}`}>
                         {player ? (
                           <>
-                            <PlayerAvatar player={player} />
+                            <PlayerAvatar player={player} index={index} />
                             <div>
                               <strong>
                                 {player.name}
@@ -684,7 +723,7 @@ export default function RoomClient({ code }: { code: string }) {
                                 {!player.active
                                   ? "Left championship"
                                   : room.config.mode === "teams"
-                                    ? `${player.team === 0 ? "Green" : "Gold"} team`
+                                    ? `${teamName(player.team)} team`
                                     : "Joined"}
                               </span>
                             </div>
@@ -694,57 +733,26 @@ export default function RoomClient({ code }: { code: string }) {
                                 Host
                               </span>
                             )}
-                            {player.id !== room.me &&
-                              player.id !== room.host && (
-                                <span className="player-actions">
-                                  {host && (
-                                    <>
-                                      <button
-                                        className="text-button"
-                                        disabled={busy || network}
-                                        onClick={() =>
-                                          void action({
-                                            action: "kick",
-                                            target: player.id,
-                                            match: room.match ?? 0,
-                                          })
-                                        }
-                                      >
-                                        Kick
-                                      </button>
-                                      <button
-                                        className="text-button"
-                                        disabled={busy || network}
-                                        onClick={() =>
-                                          void action({
-                                            action: "ban",
-                                            target: player.id,
-                                            match: room.match ?? 0,
-                                          })
-                                        }
-                                      >
-                                        Ban
-                                      </button>
-                                    </>
-                                  )}
-                                  <button
-                                    className="text-button"
-                                    disabled={busy || network}
-                                    onClick={() =>
-                                      void action({
-                                        action: "voteban",
-                                        target: player.id,
-                                        match: room.match ?? 0,
-                                      })
-                                    }
-                                  >
-                                    Vote ban
-                                    {room.banVotes?.[player.id]?.length
-                                      ? ` (${room.banVotes[player.id].length})`
-                                      : ""}
-                                  </button>
-                                </span>
+                            {kickVotes(room, player.id).votes > 0 &&
+                              player.active && (
+                                <button
+                                  className="kick-chip"
+                                  disabled={!canManage(room, player)}
+                                  onClick={() => setManaging(player)}
+                                >
+                                  Kick vote {kickVotes(room, player.id).votes}/
+                                  {kickVotes(room, player.id).needed}
+                                </button>
                               )}
+                            {canManage(room, player) && (
+                              <button
+                                className="icon-button standing-menu"
+                                aria-label={`Manage ${player.name}`}
+                                onClick={() => setManaging(player)}
+                              >
+                                <Ellipsis size={18} />
+                              </button>
+                            )}
                           </>
                         ) : (
                           <>
@@ -833,7 +841,10 @@ export default function RoomClient({ code }: { code: string }) {
                 ) : null}
               </section>
             ) : (
-              <section className="game-stage" aria-label="Multiplayer round">
+              <section
+                className="game-stage multiplayer-stage"
+                aria-label="Multiplayer round"
+              >
                 <div className="game-context">
                   <div>
                     <h1>{MODES[room.config.mode].label}</h1>
@@ -847,8 +858,10 @@ export default function RoomClient({ code }: { code: string }) {
                     )}
                   </div>
                   <div>
-                    <span className="connection-quality">
-                      {network ? "Poor connection" : "Connected"}
+                    <span
+                      className={`connection-quality ${network ? "poor" : ""}`}
+                    >
+                      {network ? "Poor connection" : "Live"}
                     </span>
                     <button
                       className="text-button compact-room-code"
@@ -867,174 +880,16 @@ export default function RoomClient({ code }: { code: string }) {
                     </button>
                   </div>
                 </div>
-                <div className="match-scoreboard" aria-label="Match scores">
-                  <div>
-                    <span>
-                      {room.config.mode === "teams" ? "Green team" : "You"}
-                    </span>
-                    <strong>
-                      {room.config.mode === "teams" ? teamScores[0] : me.score}
-                      <small> pts</small>
-                    </strong>
-                  </div>
-                  <div className="match-clock">
-                    <strong
-                      role="timer"
-                      aria-label={
-                        roundDone
-                          ? "Round complete"
-                          : room.config.seconds === 0
-                            ? "No time limit"
-                            : "Time remaining"
-                      }
+                {room.status === "finished" ? (
+                  <>
+                    <FinalLeaderboard
+                      room={room}
+                      title={championshipFinal ? championText : winnerText}
+                      championship={championshipFinal}
+                      matches={room.matches ?? []}
                     >
-                      {room.status === "finished"
-                        ? "Final"
-                        : current?.ended
-                          ? "Complete"
-                          : room.config.seconds === 0
-                            ? "∞"
-                            : formatTime(seconds)}
-                    </strong>
-                    <span>
-                      Round {room.round + 1}/{room.config.rounds}
-                    </span>
-                  </div>
-                  <div>
-                    <span>
-                      {room.config.mode === "teams"
-                        ? "Gold team"
-                        : room.config.mode === "duel"
-                          ? (rival?.name ?? "Rival")
-                          : (fieldLeader?.name ?? "Rival")}
-                    </span>
-                    <strong>
-                      {room.config.mode === "teams"
-                        ? teamScores[1]
-                        : room.config.mode === "duel"
-                          ? (rival?.score ?? 0)
-                          : (fieldLeader?.score ?? 0)}
-                      <small> pts</small>
-                    </strong>
-                  </div>
-                </div>
-                <div
-                  className="round-progress"
-                  role="region"
-                  tabIndex={0}
-                  aria-label="Round progress"
-                >
-                  {room.players.map((player) => (
-                    <span key={player.id}>
-                      <strong>
-                        {player.id === room.me ? "You" : player.name}
-                      </strong>
-                      <span>
-                        {!player.active
-                          ? "Left"
-                          : current?.solved.includes(player.id)
-                            ? "Solved"
-                            : `${current?.attempts[player.id] ?? 0}/6`}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-                <div className="game-status" role="status" aria-live="polite">
-                  {room.status === "finished" ? (
-                    championshipFinal ? (
-                      championText
-                    ) : (
-                      winnerText
-                    )
-                  ) : current?.ended ? (
-                    "Round complete"
-                  ) : solved ? (
-                    `Solved in ${current?.guesses.length}/6 · +${earned} ${earned === 1 ? "point" : "points"}`
-                  ) : exhausted ? (
-                    "Out of guesses · others are still playing"
-                  ) : room.config.seconds !== 0 && seconds === 0 ? (
-                    "Time’s up · checking results…"
-                  ) : busy ? (
-                    "Checking your guess…"
-                  ) : (
-                    <span className="sr-only">Your turn. Six guesses.</span>
-                  )}
-                </div>
-                {room.status === "playing" && !current?.ended && (
-                  <button
-                    className="text-button"
-                    disabled={busy || network}
-                    onClick={() =>
-                      void action({
-                        action: "voteSkip",
-                        match: room.match ?? 0,
-                        matchId: room.matchId,
-                      })
-                    }
-                  >
-                    Vote to skip round
-                    {current?.skipVotes?.length
-                      ? ` (${current.skipVotes.length})`
-                      : ""}
-                  </button>
-                )}
-                {current?.firstSolve && (
-                  <p className="first-solve">
-                    First solve:{" "}
-                    {room.players.find((p) => p.id === current.firstSolve)
-                      ?.name ?? "a player"}
-                  </p>
-                )}
-                {countdown > 0 && (
-                  <div className="round-countdown" role="status">
-                    Round starts in {countdown}
-                  </div>
-                )}
-                <WordPlay
-                  key={`${room.match ?? 0}:${room.round}`}
-                  guesses={current?.guesses ?? []}
-                  playable={playable && !showRules && !confirmLeave}
-                  busy={busy}
-                  showKeyboard={!roundDone}
-                  onError={setError}
-                  onGuess={async (word) =>
-                    !!(await action({
-                      action: "guess",
-                      matchId: room.matchId,
-                      word,
-                      round: room.round,
-                      match: room.match ?? 0,
-                    }))
-                  }
-                />
-                {roundDone && (
-                  <section className="result-panel" aria-label="Round result">
-                    <div className="result-word">
-                      <span>The word</span>
-                      <h2>{current?.answer?.toUpperCase()}</h2>
-                      <span>
-                        {solved ? `+${earned} points` : "No points this round"}
-                      </span>
-                    </div>
-                    <div className="result-actions">
                       {host ? (
-                        room.status !== "finished" ? (
-                          <button
-                            className="button primary"
-                            disabled={busy}
-                            onClick={() =>
-                              void action({
-                                action: "next",
-                                round: room.round,
-                                match: room.match ?? 0,
-                                matchId: room.matchId,
-                              })
-                            }
-                          >
-                            Next round
-                            <ArrowRight size={18} />
-                          </button>
-                        ) : championship && moreMatches ? (
+                        championship && moreMatches ? (
                           <button
                             className="button primary"
                             disabled={
@@ -1063,150 +918,181 @@ export default function RoomClient({ code }: { code: string }) {
                         )
                       ) : (
                         <span className="waiting-host">
-                          Waiting for the host.
+                          Waiting for the host to set up the next game.
                         </span>
                       )}
                       <button
                         className="button secondary"
-                        onClick={() => {
-                          const canvas = document.createElement("canvas");
-                          canvas.width = 640;
-                          canvas.height = 360;
-                          const ctx = canvas.getContext("2d");
-                          if (!ctx) return;
-                          ctx.fillStyle = "#F6F3E9";
-                          ctx.fillRect(0, 0, canvas.width, canvas.height);
-                          ctx.fillStyle = "#17211D";
-                          ctx.font = "bold 28px sans-serif";
-                          ctx.fillText("Word Rally", 24, 42);
-                          ctx.font = "16px sans-serif";
-                          ctx.fillText(
-                            `Room ${room.code} · Round ${room.round + 1}/${room.config.rounds}`,
-                            24,
-                            70,
-                          );
-                          let y = 110;
-                          for (const player of sorted) {
-                            ctx.fillText(
-                              `${player.name}: ${player.score} pts`,
-                              24,
-                              y,
-                            );
-                            y += 26;
-                          }
-                          ctx.fillText(
-                            room.status === "finished"
-                              ? "Match complete"
-                              : "Round complete",
-                            24,
-                            y + 10,
-                          );
-                          const link = document.createElement("a");
-                          link.download = `word-rally-${room.code}.png`;
-                          link.href = canvas.toDataURL("image/png");
-                          link.click();
-                        }}
+                        onClick={shareResult}
                       >
+                        <Share2 size={17} />
                         Share result
                       </button>
-                    </div>
-                  </section>
-                )}
-                <details className="player-progress">
-                  <summary>
-                    Players{" "}
-                    <span>
-                      {current?.solved.length ?? 0}/{room.players.length} solved
-                    </span>
-                  </summary>
-                  <ol>
-                    {sorted.map((player) => (
-                      <li key={player.id}>
-                        <span className="progress-name">
-                          {player.name}
-                          {player.id === room.me && <small> · you</small>}
+                    </FinalLeaderboard>
+                    <details className="match-details">
+                      <summary>
+                        {championship
+                          ? "Match & tournament breakdown"
+                          : "Round-by-round breakdown"}
+                      </summary>
+                      <MatchBreakdown rounds={room.results} />
+                      {championship && <ChampionshipStandings room={room} />}
+                    </details>
+                  </>
+                ) : (
+                  <div className="match-layout">
+                    <div className="play-column">
+                      <div className="round-bar">
+                        <span className="round-label">
+                          Round <strong>{room.round + 1}</strong>/
+                          {room.config.rounds}
                         </span>
-                        {player.id !== room.me &&
-                          player.id !== room.host &&
-                          player.active && (
-                            <span className="player-actions">
-                              {host && (
-                                <>
-                                  <button
-                                    className="text-button"
-                                    disabled={busy || network}
-                                    onClick={() =>
-                                      void action({
-                                        action: "kick",
-                                        target: player.id,
-                                        match: room.match ?? 0,
-                                        matchId: room.matchId,
-                                      })
-                                    }
-                                  >
-                                    Kick
-                                  </button>
-                                  <button
-                                    className="text-button"
-                                    disabled={busy || network}
-                                    onClick={() =>
-                                      void action({
-                                        action: "ban",
-                                        target: player.id,
-                                        match: room.match ?? 0,
-                                        matchId: room.matchId,
-                                      })
-                                    }
-                                  >
-                                    Ban
-                                  </button>
-                                </>
-                              )}
+                        <strong
+                          className={`match-clock ${
+                            !roundDone &&
+                            room.config.seconds !== 0 &&
+                            seconds <= 10
+                              ? "urgent"
+                              : ""
+                          }`}
+                          role="timer"
+                          aria-label={
+                            roundDone
+                              ? "Round complete"
+                              : room.config.seconds === 0
+                                ? "No time limit"
+                                : "Time remaining"
+                          }
+                        >
+                          {current?.ended
+                            ? "Done"
+                            : room.config.seconds === 0
+                              ? "∞"
+                              : formatTime(seconds)}
+                        </strong>
+                        {!current?.ended && me?.active ? (
+                          <button
+                            className="text-button skip-vote"
+                            disabled={
+                              busy ||
+                              network ||
+                              !!current?.skipVotes?.includes(room.me)
+                            }
+                            onClick={() =>
+                              void action({
+                                action: "voteSkip",
+                                match: room.match ?? 0,
+                                matchId: room.matchId,
+                              })
+                            }
+                          >
+                            <SkipForward size={15} />
+                            Skip{" "}
+                            {current?.skipVotes?.length
+                              ? `${current.skipVotes.length}/${skipNeeded}`
+                              : "round"}
+                          </button>
+                        ) : (
+                          <span className="skip-vote" aria-hidden="true" />
+                        )}
+                      </div>
+                      <div
+                        className="game-status"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        {current?.ended ? (
+                          "Round complete"
+                        ) : spectator ? (
+                          "You’re watching this match"
+                        ) : solved ? (
+                          `Solved in ${current?.guesses.length}/6 · +${earned} ${earned === 1 ? "point" : "points"}`
+                        ) : exhausted ? (
+                          "Out of guesses · others are still playing"
+                        ) : room.config.seconds !== 0 && seconds === 0 ? (
+                          "Time’s up · checking results…"
+                        ) : busy ? (
+                          "Checking your guess…"
+                        ) : current?.firstSolve ? (
+                          `${room.players.find((p) => p.id === current.firstSolve)?.name ?? "A player"} solved it first`
+                        ) : (
+                          <span className="sr-only">
+                            Your turn. Six guesses.
+                          </span>
+                        )}
+                      </div>
+                      {countdown > 0 && (
+                        <div className="round-countdown" role="status">
+                          Round starts in {countdown}
+                        </div>
+                      )}
+                      <WordPlay
+                        key={`${room.match ?? 0}:${room.round}`}
+                        guesses={current?.guesses ?? []}
+                        playable={
+                          playable && !showRules && !confirmLeave && !managing
+                        }
+                        busy={busy}
+                        showKeyboard={!roundDone && !spectator}
+                        onError={setError}
+                        onGuess={async (word) =>
+                          !!(await action({
+                            action: "guess",
+                            matchId: room.matchId,
+                            word,
+                            round: room.round,
+                            match: room.match ?? 0,
+                          }))
+                        }
+                      />
+                      {roundDone && (
+                        <section
+                          className="result-panel"
+                          aria-label="Round result"
+                        >
+                          <div className="result-word">
+                            <span>The word</span>
+                            <h2>{current?.answer?.toUpperCase()}</h2>
+                            <span>
+                              {solved
+                                ? `+${earned} ${earned === 1 ? "point" : "points"}`
+                                : "No points this round"}
+                            </span>
+                          </div>
+                          <div className="result-actions">
+                            {host ? (
                               <button
-                                className="text-button"
-                                disabled={busy || network}
+                                className="button primary"
+                                disabled={busy}
                                 onClick={() =>
                                   void action({
-                                    action: "voteban",
-                                    target: player.id,
+                                    action: "next",
+                                    round: room.round,
                                     match: room.match ?? 0,
                                     matchId: room.matchId,
                                   })
                                 }
                               >
-                                Vote ban
-                                {room.banVotes?.[player.id]?.length
-                                  ? ` (${room.banVotes[player.id].length})`
-                                  : ""}
+                                Next round
+                                <ArrowRight size={18} />
                               </button>
-                            </span>
-                          )}
-                        <span>
-                          {!player.active
-                            ? "Left match"
-                            : current?.solved.includes(player.id)
-                              ? "Solved"
-                              : (current?.attempts[player.id] ?? 0) >= 6
-                                ? "Out of guesses"
-                                : `${current?.attempts[player.id] ?? 0}/6 guesses`}
-                        </span>
-                        <strong>
-                          {player.score} <small>pts</small>
-                        </strong>
-                      </li>
-                    ))}
-                  </ol>
-                </details>
-                {roundDone && (
-                  <details className="match-details">
-                    <summary>
-                      {championship
-                        ? "Match & tournament breakdown"
-                        : "Match breakdown"}
-                    </summary>
-                    <MatchBreakdown rounds={room.results} />
-                    {championship && <ChampionshipStandings room={room} />}
-                  </details>
+                            ) : (
+                              <span className="waiting-host">
+                                {room.config.autoAdvance
+                                  ? "Next round starts automatically."
+                                  : "Waiting for the host."}
+                              </span>
+                            )}
+                          </div>
+                          <details className="match-details">
+                            <summary>Round-by-round breakdown</summary>
+                            <MatchBreakdown rounds={room.results} />
+                          </details>
+                        </section>
+                      )}
+                    </div>
+                    <Standings room={room} onManage={setManaging} />
+                  </div>
                 )}
               </section>
             )}
@@ -1217,6 +1103,23 @@ export default function RoomClient({ code }: { code: string }) {
         <Modal title="How to play" close={() => setShowRules(false)}>
           <Rules />
         </Modal>
+      )}
+      {managing && room && (
+        <ManagePlayer
+          room={room}
+          player={managing}
+          busy={busy}
+          close={() => setManaging(null)}
+          act={(kind) => {
+            void action({
+              action: kind,
+              target: managing.id,
+              match: room.match ?? 0,
+            }).then((next) => {
+              if (next) setManaging(null);
+            });
+          }}
+        />
       )}
       {confirmLeave && (
         <Modal title="Leave this room?" close={() => setConfirmLeave(false)}>

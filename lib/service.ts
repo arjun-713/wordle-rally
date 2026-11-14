@@ -52,6 +52,16 @@ export function publicRoom(
           startedAt: current.startedAt,
           firstSolve: current.firstSolve,
           skipVotes: current.skipVotes,
+          // Rivals' boards as colour marks only. Their words are never sent;
+          // spectators see every player's ghost board.
+          ghosts: Object.fromEntries(
+            room.players
+              .filter((p) => p.id !== me)
+              .map((p) => [
+                p.id,
+                (current.guesses[p.id] ?? []).map((g) => ({ marks: g.marks })),
+              ]),
+          ),
           ...(current.ended ? { answer: current.answer } : {}),
         }
       : null,

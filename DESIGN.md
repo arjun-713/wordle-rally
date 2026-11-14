@@ -1,6 +1,6 @@
 # Wordrally — Editorial Arcade
 
-The board is the product. Home is an expressive play hub; active rounds use a quiet, centred board with compact match context. No permanent stats rail, browser-storage notices, marketing sections or simulated production players.
+The board is the product. Home is an expressive play hub; active rounds use a centred board with a multiplayer standings panel. No personal stats rail, browser-storage notices, marketing sections or simulated production players.
 
 ## Tokens
 
@@ -30,7 +30,7 @@ Use the existing locally hosted Manrope variable face throughout, with system sa
 
 ## Frame and hierarchy
 
-One centred app frame (maximum 1200px), equal 16–40px gutters. Home uses a two-column split, stacking actions above its explicitly labelled preview on phones. No long landing narrative. Game screens use a single column: top navigation, compact mode/round context, board status, 5×6 grid and keyboard. The letter legend lives in Help only. Center the game group vertically in the viewport; let short screens grow naturally. Scores are one narrow strip, player progress shows counts in a compact keyboard-focusable scrolling strip, with expandable details, without revealing letters. Real results appear after finishing, with the board retained. Statistics stay on /stats.
+One centred app frame (maximum 1200px), equal 16–40px gutters. Home uses a two-column split, stacking actions above its explicitly labelled preview on phones. No long landing narrative. Game screens use a single column: top navigation, compact mode/round context, board status, 5×6 grid and keyboard. The letter legend lives in Help only. Center the game group vertically in the viewport; let short screens grow naturally. Multiplayer pairs the board with a Standings panel: every player's rank, score, status and a colour-only ghost board (rivals' letters are never shown). On wide screens it sits beside the board; under 1000px it becomes a horizontally scrolling card strip above the round bar. Each card has a menu for host kick/ban or a player vote to kick, and open kick votes show as a chip. A finished match replaces the board with a podium and full leaderboard (solves, average guesses, fastest solve). Statistics stay on /stats.
 
 Solo tiles are 62px at 1440×900 and about 61px at 1366×768; multiplayer uses smaller height-aware tiles to leave space for its match strip. At 320×700 and 390×844 the grid and keyboard fit the viewport where browser chrome permits. Key heights are at least 44px; widths flex to keep all ten letters in one row. Respect safe-area padding. No fixed-height clipping.
 
@@ -43,4 +43,4 @@ Native dialogs retain focus trapping, Escape, backdrop dismissal and return focu
 ## Product truth
 
 Supported: duel, 2v2, 2–16 free-for-all; classic/bonus; 1–20 rounds; optional timers; three difficulty pools with 14,877 answers (14,511 available to random games after reserving Daily); championships; Daily; Unlimited; persisted names/history/stats; sound and supported-device haptics.
-Not implemented: live online presence, player-ready acknowledgements, countdown, accounts, theme/contrast settings, spectators or team chat. Joined players are labelled Joined. Only the host starts/advances rooms. Prototype-like data is confined to the labelled homepage illustration.
+Not implemented: live online presence, player-ready acknowledgements, accounts, theme/contrast settings or team chat. Joined players are labelled Joined. Only the host starts/advances rooms. Prototype-like data is confined to the labelled homepage illustration.

@@ -11,7 +11,8 @@ export function roomPollDelay(
   if (failures) return Math.min(12000, 2000 * 2 ** Math.min(failures - 1, 3));
   if (!room) return 5000;
   const me = room.players.find((p) => p.id === room.me);
-  if (!me?.active) return null;
+  const watching = room.spectators?.some((s) => s.id === room.me);
+  if (!me?.active && !watching) return null;
   if (
     room.status === "lobby" &&
     (room.match ?? 0) > 0 &&

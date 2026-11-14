@@ -44,10 +44,12 @@ The product is branded Wordrally. Initial capacity limit is 16 players per room;
 - Daily words are reserved from new random games. The checked-in non-repeating calendar starts October 25, 2026 and must be extended before its 366 assigned words run out; it never wraps. Legacy identities that already saw today’s word are offered Unlimited instead of a repeat.
 - Personal statistics at `/stats` show completed puzzle counts, solve rate, streaks, average guesses on wins, six-bin guess distributions, multiplayer points, and match results. Statistics live on the dedicated stats screen; active games have no metrics rail.
 - Sound and haptics are optional, off by default, and saved in the browser. Haptics depend on browser/device support. Motion follows reduced-motion settings and acknowledged guesses do not replay reveals on reload.
-- No spectators, private team discussion, account system, or installable app support are included.
+- During a round, each player sees rivals' boards as colours only (ghost view); rivals' words are never sent to other players. Spectators see every player's ghost board.
+- Hosts can kick or ban players; other players can nominate a player for a vote kick, which removes them once a majority of the other active players agree.
+- No private team discussion, account system, or installable app support are included.
 
 ## Frontend contract
 
-Editorial Arcade: warm paper, ink, lime actions, tactile tiles and Manrope. Home is a compact play hub; gameplay is a vertically centred board and keyboard with no permanent legend, sidebar or storage notices. Help contains the colour legend. Create/Join are native dialogs; invites and route deep links remain real. Multiplayer shows scores, server deadlines and private attempt counts, with results and breakdowns after completion.
+Editorial Arcade: warm paper, ink, lime actions, tactile tiles and Manrope. Home is a compact play hub; gameplay is a vertically centred board and keyboard with no permanent legend or storage notices; multiplayer adds a standings panel with ghost boards. Help contains the colour legend. Create/Join are native dialogs; invites and route deep links remain real. Multiplayer shows scores, server deadlines and private attempt counts, with results and breakdowns after completion.
 
 The backend implements every advertised game format. It does not implement online presence, separate player readiness, countdowns, account linking or theme/contrast preferences; the UI does not invent those states. Network failures show reconnecting separately from an explicit departure.
