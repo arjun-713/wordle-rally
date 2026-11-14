@@ -46,10 +46,25 @@ import { RacePlay } from "./race-play";
 import { TopNav } from "./navigation";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
 const ACTION_TIMEOUT_MS = 8000;
-const GUESS_TIMEOUT_MS = 6000;
+const GUESS_TIMEOUT_MS = 7000;
+const POLL_TIMEOUT_MS = 8000;
 const ACTION_RETRY_DELAYS = [250, 750, 1500];
-const GUESS_RETRY_DELAYS = [250, 750, 1500, 3000, 5000];
+const GUESS_RETRY_DELAYS = [300, 1000, 2000, 3000];
+// How long a guess keeps retrying by itself before handing back to the player.
+const GUESS_RETRY_WINDOW_MS = 30000;
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+// Wait before a retry, but go at once if the connection comes back.
+function waitForNetwork(ms: number) {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      window.removeEventListener("online", done);
+      resolve();
+    };
+    const timer = setTimeout(done, navigator.onLine ? ms : 15000);
+    window.addEventListener("online", done);
+  });
+}
 // A lost reply may still have been committed. These helpers read the durable
 // room state so a retry can adopt the saved result instead of resubmitting.
 function hasGuess(
@@ -225,6 +240,7 @@ export default function RoomClient({ code }: { code: string }) {
           `/api/rooms/${code}${current ? `?revision=${current.revision}` : ""}`,
           undefined,
           controller.signal,
+          POLL_TIMEOUT_MS,
         );
         if (stopped || attempt !== epoch) return;
         failures = 0;
@@ -326,9 +342,11 @@ export default function RoomClient({ code }: { code: string }) {
         : (currentRef.current?.current?.guesses.length ?? 0),
       matchId = currentRef.current?.matchId,
       match = currentRef.current?.match ?? 0,
-      // Every attempt for this word reuses the ID, so a reply lost after the
-      // server committed returns the saved board instead of a duplicate error.
-      requestId = newRequestId();
+      // Every attempt for this word reuses the ID. If an earlier attempt was
+      // saved but its reply was lost, the server returns the saved board
+      // instead of counting the guess twice, so resending is always safe.
+      requestId = newRequestId(),
+      started = Date.now();
     for (let attempt = 0; ; attempt++) {
       try {
         const next = await api<PublicRoom>(
@@ -342,33 +360,39 @@ export default function RoomClient({ code }: { code: string }) {
         return next;
       } catch (error) {
         if (isGuessRejection(error) && !isDuplicateGuess(error)) throw error;
-        setRecovering(true);
-        const fresh = await freshRoom().catch(() => null);
-        if (fresh) {
-          if (hasGuess(fresh, word, round, attemptsBefore)) {
-            setRecovering(false);
-            return fresh;
-          }
-          // The round or match advanced while this guess was in flight. The
-          // board moved on, so adopt it rather than replaying a stale guess.
-          if (
-            stateMoved(fresh, round, matchId, match) ||
-            fresh.current?.ended
-          ) {
-            setRecovering(false);
-            return fresh;
-          }
-        }
-        const definitive =
-          isDuplicateGuess(error) ||
-          (error instanceof ApiError &&
-            error.status >= 400 &&
-            error.status < 500);
-        if (definitive || attempt >= GUESS_RETRY_DELAYS.length) {
+        const transient =
+          !(error instanceof ApiError) ||
+          error.status === 0 ||
+          error.status >= 500 ||
+          error.code === "ROOM_BUSY";
+        if (!transient) {
+          // A definite answer (round over, match changed, already guessed):
+          // adopt the saved state rather than retrying.
+          const fresh = await freshRoom().catch(() => null);
           setRecovering(false);
+          if (
+            fresh &&
+            (hasGuess(fresh, word, round, attemptsBefore) ||
+              stateMoved(fresh, round, matchId, match) ||
+              fresh.current?.ended)
+          )
+            return fresh;
           throw error;
         }
-        await wait(GUESS_RETRY_DELAYS[attempt]);
+        // Slow or dropped connection: keep the word on the board and resend
+        // the same request until it lands, with no reload needed.
+        setRecovering(true);
+        if (Date.now() - started > GUESS_RETRY_WINDOW_MS) {
+          setRecovering(false);
+          throw new ApiError(
+            "Couldn’t send your guess. Press Enter to try again.",
+            0,
+            "NETWORK_ERROR",
+          );
+        }
+        await waitForNetwork(
+          GUESS_RETRY_DELAYS[Math.min(attempt, GUESS_RETRY_DELAYS.length - 1)],
+        );
       }
     }
   }

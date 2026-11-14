@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { roomPollDelay } from "../lib/room-polling";
+import { POLL, roomPollDelay } from "../lib/room-polling";
 import type { PublicRoom } from "../lib/types";
 
 function room(overrides: Partial<PublicRoom> = {}): PublicRoom {
@@ -33,43 +33,34 @@ function room(overrides: Partial<PublicRoom> = {}): PublicRoom {
   };
 }
 
-test("poll failures back off quickly and cap below the request timeout", () => {
+test("poll failures retry within seconds instead of waiting long", () => {
   const active = room();
-  assert.equal(roomPollDelay(active, 0, 1000, 1), 2000);
-  assert.equal(roomPollDelay(active, 0, 1000, 2), 4000);
-  assert.equal(roomPollDelay(active, 0, 1000, 3), 8000);
-  assert.equal(roomPollDelay(active, 0, 1000, 4), 12000);
-  assert.equal(roomPollDelay(active, 0, 1000, 9), 12000);
+  assert.equal(roomPollDelay(active, 0, 1000, 1), 1000);
+  assert.equal(roomPollDelay(active, 0, 1000, 2), 2000);
+  assert.equal(roomPollDelay(active, 0, 1000, 3), 4000);
+  assert.equal(roomPollDelay(active, 0, 1000, 9), POLL.retryMax);
 });
-test("an active round keeps polling fast instead of backing off", () => {
-  assert.equal(roomPollDelay(room(), 0, 1000), 5000);
-  assert.equal(roomPollDelay(room(), 90000, 1000), 5000);
-  assert.equal(roomPollDelay(room({ round: 1 }), 60000, 1000), 5000);
+test("an active round polls fast, then backs off as the room goes quiet", () => {
+  assert.equal(roomPollDelay(room(), 0, 1000), POLL.live);
+  assert.equal(roomPollDelay(room(), 45000, 1000), POLL.liveQuiet);
+  assert.equal(roomPollDelay(room(), 180000, 1000), POLL.idle);
 });
-test("an ended round polls sooner and a quiet lobby backs off", () => {
-  assert.equal(
-    roomPollDelay(
-      room({ current: { ...room().current!, ended: true } }),
-      0,
-      1000,
-    ),
-    2500,
-  );
-  assert.equal(
-    roomPollDelay(room({ status: "lobby", current: null }), 60000, 1000),
-    15000,
-  );
-  assert.equal(
-    roomPollDelay(room({ status: "lobby", current: null }), 0, 1000),
-    5000,
-  );
+test("an ended round polls promptly and a quiet lobby backs off", () => {
+  const ended = room({
+    current: { ...room().current!, ended: true },
+  });
+  assert.equal(roomPollDelay(ended, 0, 1000), POLL.roundOver);
+  const lobby = room({ status: "lobby", current: null });
+  assert.equal(roomPollDelay(lobby, 0, 1000), POLL.lobby);
+  assert.equal(roomPollDelay(lobby, 90000, 1000), POLL.lobbyQuiet);
+  assert.equal(roomPollDelay(lobby, 400000, 1000), POLL.lobbyIdle);
 });
 test("the next deadline wakes polling and inactive players stop", () => {
   const timed = room({
     config: { mode: "duel", players: 2, rounds: 2, seconds: 30 },
-    current: { ...room().current!, endsAt: 3000 },
+    current: { ...room().current!, endsAt: 2000 },
   });
-  assert.equal(roomPollDelay(timed, 0, 1000), 2150);
+  assert.equal(roomPollDelay(timed, 0, 1000), 1150);
   assert.equal(
     roomPollDelay(
       room({
@@ -82,5 +73,11 @@ test("the next deadline wakes polling and inactive players stop", () => {
     ),
     null,
   );
-  assert.equal(roomPollDelay(null, 0, 1000), 5000);
+  assert.equal(roomPollDelay(null, 0, 1000), POLL.lobby);
+  const finished = room({ status: "finished" });
+  assert.equal(roomPollDelay(finished, 0, 1000), null, "host stops polling");
+  assert.equal(
+    roomPollDelay({ ...finished, me: "rival" }, 0, 1000),
+    POLL.finished,
+  );
 });

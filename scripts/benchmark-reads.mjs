@@ -59,7 +59,7 @@ async function start(disabled) {
         ALLOW_LOCAL_STORE: "true",
         UPSTASH_REDIS_REST_URL: `http://127.0.0.1:${bridge.address().port}`,
         UPSTASH_REDIS_REST_TOKEN: token,
-        RALLY_DISABLE_ROOM_CACHE: disabled ? "true" : "false",
+        RALLY_ROOM_REUSE_MS: disabled ? "1" : "1500",
         RALLY_DISABLE_RATE_RESERVATIONS: disabled ? "true" : "false",
       },
       stdio: ["ignore", "pipe", "pipe"],

@@ -69,7 +69,7 @@ export class ReservationLimiter {
       }
       if (!allowance.pending) {
         const entry = allowance;
-        entry.pending = this.allocate(key, 4, maximum)
+        entry.pending = this.allocate(key, 10, maximum)
           .then((granted) => {
             entry.remaining = granted;
             entry.denied = granted === 0;

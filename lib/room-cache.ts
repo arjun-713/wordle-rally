@@ -1,18 +1,9 @@
 import { requireGame } from "./engine";
-import { revalidateTag } from "next/cache";
-import { roomCacheEnabled, roomCacheTag, readRoomCached } from "./store";
+import { readRoomCached } from "./store";
 import { roomAction, roomSnapshot } from "./service";
 
-export function invalidateRoom(code: string) {
-  if (!roomCacheEnabled()) return;
-  try {
-    revalidateTag(roomCacheTag(code), { expire: 0 });
-  } catch {
-    console.error(
-      "Room cache invalidation failed; the ten-second snapshot window still bounds staleness.",
-    );
-  }
-}
+// Polls use the shared per-instance room read. `fresh` is for a client that
+// just lost a reply and needs the authoritative state before deciding to retry.
 export async function readRoom(
   code: string,
   id: string,
@@ -23,20 +14,12 @@ export async function readRoom(
     Number.isSafeInteger(minimumRevision) && minimumRevision >= 0,
     "Invalid room revision.",
   );
-  // A client that just lost a reply cannot trust a snapshot from before it.
-  // Read through the live path and replace the cached window with it.
-  if (fresh) {
-    const room = await roomAction(code, id);
-    invalidateRoom(room.code);
-    return room;
-  }
-  if (!roomCacheEnabled()) return roomAction(code, id);
-  const snapshot = await roomSnapshot(
+  if (fresh) return roomAction(code, id);
+  const { view } = await roomSnapshot(
     code,
     id,
     () => readRoomCached(code),
     minimumRevision,
   );
-  if (snapshot.fresh) invalidateRoom(code);
-  return snapshot.view;
+  return view;
 }

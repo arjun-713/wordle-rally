@@ -22,3 +22,15 @@ Play at **[wordle-rally.vercel.app](https://wordle-rally.vercel.app)**.
 | **Championship**     | The same players or teams play several matches, with points carried into tournament standings. The host advances between matches; tied leaders share the title.                                                                                                 |
 | **Daily challenge**  | Play one shared puzzle per day, with six guesses and saved progress.                                                                                                                                                                                            |
 | **Wordle Unlimited** | Play solo at your own pace and start another puzzle whenever you finish.                                                                                                                                                                                        |
+
+## Hosting on the free Redis tier
+
+Rooms live in Upstash Redis, whose free tier allows 500,000 commands a month. Polling for rivals' progress is most of that, so the app spends it carefully:
+
+- **Guesses** cost about one command. A server instance starts a guess from its latest copy of the room, and the write only lands if that copy is still current. If it isn't, Redis returns the current room in the same reply, so retries need no extra read.
+- **Polls** read Redis directly with a 2-second timeout. Players polling the same room on one server instance share a single read, reused for 1.5 seconds (`RALLY_ROOM_REUSE_MS`).
+- **Poll timing** follows the game: every 2.5s in a live round, slowing to 3.5s after 30 quiet seconds and 8s after 2 idle minutes. Lobbies poll every 3s, then 8s and 15s. Hidden tabs stop polling. Values are in `lib/room-polling.ts`.
+
+Rough budget for a 4-player, 5-round game (about 10 minutes including the lobby): 500–1,200 commands, depending on how often players share a server instance. That's roughly **400–1,000 four-player games a month** (about 13–33 a day) on the free tier.
+
+For the lowest latency, keep the Upstash database in the same region as the Vercel functions (`bom1`, Mumbai, in `vercel.json`).

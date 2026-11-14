@@ -65,8 +65,8 @@ test("a reservation completing across a minute boundary cannot spend old slots i
   now = 60001;
   release();
   await waiting;
-  assert.equal(db.booked.get("rally:rate:player:solo:0"), 4);
-  assert.equal(db.booked.get("rally:rate:player:solo:1"), 4);
+  assert.equal(db.booked.get("rally:rate:player:solo:0"), 10);
+  assert.equal(db.booked.get("rally:rate:player:solo:1"), 10);
   await limiter.take("player", "solo", 120);
   assert.equal(db.calls(), 2);
 });

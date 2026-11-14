@@ -1,6 +1,6 @@
 import { body, identity, respond } from "@/lib/http";
 import { validateGuessInput } from "@/lib/guess-input";
-import { readRoom, invalidateRoom } from "@/lib/room-cache";
+import { readRoom } from "@/lib/room-cache";
 import { roomAction } from "@/lib/service";
 import { rateLimit } from "@/lib/store";
 export const runtime = "nodejs";
@@ -40,7 +40,6 @@ export async function POST(request: Request, context: Context) {
       input.action === "join" ? 20 : 100,
     );
     const room = await roomAction(code.toUpperCase(), id, input);
-    invalidateRoom(room.code);
     return room;
   });
 }
