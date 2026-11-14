@@ -7,6 +7,26 @@ import type { Config, PublicRoom } from "@/lib/types";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
 import { TopNav } from "./navigation";
 import { defaultConfig, finalConfig, RoomConfigFields } from "./room-config";
+import { isRetryableActionError, newRequestId } from "@/lib/client-api";
+
+// One request ID for every attempt: if a reply is lost after the room was
+// made, the retry returns that room instead of creating a second one.
+async function createWithRetry(data: { name: string; config: unknown }) {
+  const requestId = newRequestId();
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await api<PublicRoom>(
+        "/api/rooms",
+        { ...data, requestId },
+        undefined,
+        8000,
+      );
+    } catch (error) {
+      if (!isRetryableActionError(error) || attempt >= 2) throw error;
+      await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));
+    }
+  }
+}
 
 const preview = [
   {
@@ -32,6 +52,9 @@ export default function Home() {
     [error, setError] = useState("");
   useEffect(() => {
     setName(savedName());
+    // Wake the room-creation function while the player reads the page, so
+    // "Create room" doesn't wait on a cold start. It touches no storage.
+    void fetch("/api/rooms", { cache: "no-store" }).catch(() => {});
   }, []);
   function open(next: typeof panel) {
     setError("");
@@ -50,10 +73,7 @@ export default function Home() {
       saveName(name);
       const room =
         panel === "create"
-          ? await api<PublicRoom>("/api/rooms", {
-              name,
-              config: finalConfig(config),
-            })
+          ? await createWithRetry({ name, config: finalConfig(config) })
           : await api<PublicRoom>(`/api/rooms/${code.toUpperCase()}`, {
               action: "join",
               name,
