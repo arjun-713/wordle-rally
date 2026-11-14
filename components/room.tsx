@@ -481,7 +481,7 @@ export default function RoomClient({ code }: { code: string }) {
       setCopied(link ? "link" : "code");
       setTimeout(() => setCopied(""), 2500);
     } catch {
-      setError("Clipboard unavailable. Select and copy the room code above.");
+      setError("Couldn’t copy. Share the code instead.");
     }
   }
   async function join(e: React.FormEvent) {
@@ -614,10 +614,10 @@ export default function RoomClient({ code }: { code: string }) {
           </div>
         ) : removed ? (
           <section className="join-gate">
-            <h1>You’re no longer in this room</h1>
-            <p>The host or the other players removed you from room {code}.</p>
+            <h1>You were removed</h1>
+            <p>Room {code}</p>
             <Link href="/" className="button primary">
-              Choose a mode
+              Home
               <ArrowRight size={18} />
             </Link>
           </section>
@@ -628,7 +628,7 @@ export default function RoomClient({ code }: { code: string }) {
             {needsJoin && (
               <form onSubmit={join} className="setup-form">
                 <label>
-                  Your player name
+                  Your name
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
@@ -657,12 +657,12 @@ export default function RoomClient({ code }: { code: string }) {
                     })
                   }
                 >
-                  Spectate instead
+                  Just watch
                 </button>
               </form>
             )}
             <Link href="/" className="text-button">
-              Choose a mode
+              Home
             </Link>
           </section>
         ) : !me?.active && !spectator ? (
@@ -670,7 +670,7 @@ export default function RoomClient({ code }: { code: string }) {
             <h1>You’re out of this match</h1>
             <p>Room {room.code}</p>
             <Link href="/" className="button primary">
-              Choose a mode
+              Home
               <ArrowRight size={18} />
             </Link>
           </section>
@@ -683,16 +683,11 @@ export default function RoomClient({ code }: { code: string }) {
             )}
             {recovering ? (
               <div className="game-error reconnecting" role="status">
-                <span>
-                  Connection is slow — retrying your action automatically…
-                </span>
+                <span>Slow connection — retrying…</span>
               </div>
             ) : network ? (
               <div className="game-error reconnecting" role="status">
-                <span>
-                  Connection interrupted — retrying automatically. Your board is
-                  saved.
-                </span>
+                <span>Reconnecting… your board is saved.</span>
                 <button onClick={() => polling.current?.sync()}>
                   Retry connection
                 </button>
@@ -704,12 +699,12 @@ export default function RoomClient({ code }: { code: string }) {
                   <h1>
                     {(room.match ?? 0) > 0
                       ? `Match ${(room.match ?? 0) + 1} lobby`
-                      : "Your room is open"}
+                      : "Room open"}
                   </h1>
                   <span>{MODES[room.config.mode].label}</span>
                 </div>
                 <div className="lobby-code">
-                  <span>Room code</span>
+                  <span>Share this code</span>
                   <button
                     className="code-copy"
                     onClick={() => void copy()}
@@ -723,7 +718,7 @@ export default function RoomClient({ code }: { code: string }) {
                     onClick={() => void copy(true)}
                   >
                     <Link2 size={17} />
-                    {copied === "link" ? "Link copied" : "Copy invite link"}
+                    {copied === "link" ? "Link copied" : "Copy link"}
                   </button>
                   <span className="sr-only" role="status">
                     {copied === "code" ? "Room code copied" : ""}
@@ -736,24 +731,28 @@ export default function RoomClient({ code }: { code: string }) {
                   </span>
                   <span>
                     {room.config.mode === "race"
-                      ? "Race clock · skip & return"
+                      ? "Any order"
                       : room.config.seconds === 0
-                        ? "No time limit"
-                        : `${room.config.seconds}s / round`}
+                        ? "No timer"
+                        : room.config.seconds < 120
+                          ? `${room.config.seconds}s timer`
+                          : `${room.config.seconds / 60} min timer`}
                   </span>
                   <span>
                     {room.config.scoring === "bonus"
-                      ? "6–1 bonus points"
-                      : "1 point / solve"}
+                      ? "Bonus scoring"
+                      : "Classic scoring"}
                   </span>
-                  <span>{room.config.difficulty ?? "mixed"} words</span>
+                  <span className="lobby-difficulty">
+                    {room.config.difficulty ?? "mixed"} words
+                  </span>
                   {championship && <span>{room.config.matches} matches</span>}
                 </div>
                 <div className="lobby-roster-heading">
                   <h2>Players</h2>
                   <span>
-                    {room.players.filter((player) => player.active).length} /{" "}
-                    {room.config.players} joined
+                    {room.players.filter((player) => player.active).length}/
+                    {room.config.players}
                   </span>
                 </div>
                 <ul className="lobby-roster">
@@ -771,7 +770,7 @@ export default function RoomClient({ code }: { code: string }) {
                               </strong>
                               <span>
                                 {!player.active
-                                  ? "Left championship"
+                                  ? "Left"
                                   : room.config.mode === "teams"
                                     ? `${teamName(player.team)} team`
                                     : "Joined"}
@@ -790,7 +789,7 @@ export default function RoomClient({ code }: { code: string }) {
                                   disabled={!canManage(room, player)}
                                   onClick={() => setManaging(player)}
                                 >
-                                  Kick vote {kickVotes(room, player.id).votes}/
+                                  Kick {kickVotes(room, player.id).votes}/
                                   {kickVotes(room, player.id).needed}
                                 </button>
                               )}
@@ -839,11 +838,9 @@ export default function RoomClient({ code }: { code: string }) {
                 <div className="lobby-start">
                   {blockedChampionship ? (
                     <>
-                      <p>
-                        A player left. Championships keep the original roster.
-                      </p>
+                      <p>A player left, so this championship is over.</p>
                       <Link href="/" className="button primary">
-                        Create a new room
+                        New room
                         <ArrowRight size={18} />
                       </Link>
                     </>
@@ -869,8 +866,7 @@ export default function RoomClient({ code }: { code: string }) {
                       {room.players.length < room.config.players && (
                         <p>
                           Waiting for{" "}
-                          {room.config.players - room.players.length} more to
-                          join.
+                          {room.config.players - room.players.length} more…
                         </p>
                       )}
                     </>
@@ -885,7 +881,7 @@ export default function RoomClient({ code }: { code: string }) {
                 </div>
                 {championship && room.matches?.length ? (
                   <details className="match-details">
-                    <summary>Tournament standings</summary>
+                    <summary>Championship</summary>
                     <ChampionshipStandings room={room} />
                   </details>
                 ) : null}
@@ -980,7 +976,7 @@ export default function RoomClient({ code }: { code: string }) {
                         )
                       ) : (
                         <span className="waiting-host">
-                          Waiting for the host to set up the next game.
+                          Waiting for the host…
                         </span>
                       )}
                       <button
@@ -988,14 +984,12 @@ export default function RoomClient({ code }: { code: string }) {
                         onClick={shareResult}
                       >
                         <Share2 size={17} />
-                        Share result
+                        Share
                       </button>
                     </FinalLeaderboard>
                     <details className="match-details">
                       <summary>
-                        {championship
-                          ? "Match & tournament breakdown"
-                          : "Round-by-round breakdown"}
+                        {championship ? "Matches & rounds" : "Rounds"}
                       </summary>
                       <MatchBreakdown rounds={room.results} />
                       {championship && <ChampionshipStandings room={room} />}
@@ -1066,15 +1060,15 @@ export default function RoomClient({ code }: { code: string }) {
                         {current?.ended ? (
                           "Round complete"
                         ) : spectator ? (
-                          "You’re watching this match"
+                          "Spectating"
                         ) : solved ? (
                           `Solved in ${current?.guesses.length}/6 · +${earned} ${earned === 1 ? "point" : "points"}`
                         ) : exhausted ? (
-                          "Out of guesses · others are still playing"
+                          "Out of guesses · others still playing"
                         ) : room.config.seconds !== 0 && seconds === 0 ? (
-                          "Time’s up · checking results…"
+                          "Time’s up"
                         ) : busy ? (
-                          "Checking your guess…"
+                          "Checking…"
                         ) : current?.firstSolve ? (
                           `${room.players.find((p) => p.id === current.firstSolve)?.name ?? "A player"} solved it first`
                         ) : (
@@ -1085,7 +1079,7 @@ export default function RoomClient({ code }: { code: string }) {
                       </div>
                       {countdown > 0 && (
                         <div className="round-countdown" role="status">
-                          Round starts in {countdown}
+                          Starting in {countdown}
                         </div>
                       )}
                       <WordPlay
@@ -1095,7 +1089,7 @@ export default function RoomClient({ code }: { code: string }) {
                           playable && !showRules && !confirmLeave && !managing
                         }
                         busy={busy}
-                        showKeyboard={!roundDone && !spectator}
+                        showLetters={!roundDone && !spectator}
                         onError={setError}
                         onGuess={async (word) =>
                           !!(await action({
@@ -1118,7 +1112,7 @@ export default function RoomClient({ code }: { code: string }) {
                             <span>
                               {solved
                                 ? `+${earned} ${earned === 1 ? "point" : "points"}`
-                                : "No points this round"}
+                                : "No points"}
                             </span>
                           </div>
                           <div className="result-actions">
@@ -1141,13 +1135,13 @@ export default function RoomClient({ code }: { code: string }) {
                             ) : (
                               <span className="waiting-host">
                                 {room.config.autoAdvance
-                                  ? "Next round starts automatically."
-                                  : "Waiting for the host."}
+                                  ? "Next round coming up…"
+                                  : "Waiting for the host…"}
                               </span>
                             )}
                           </div>
                           <details className="match-details">
-                            <summary>Round-by-round breakdown</summary>
+                            <summary>Rounds</summary>
                             <MatchBreakdown rounds={room.results} />
                           </details>
                         </section>
@@ -1185,20 +1179,20 @@ export default function RoomClient({ code }: { code: string }) {
       )}
       {confirmLeave && (
         <Modal title="Leave this room?" close={() => setConfirmLeave(false)}>
-          <p>Your current turn ends when you leave.</p>
+          <p>Your turn ends if you go.</p>
           <div className="result-actions">
             <button
               className="button secondary"
               onClick={() => setConfirmLeave(false)}
             >
-              Keep playing
+              Stay
             </button>
             <button
               className="button primary"
               disabled={busy}
               onClick={() => void leave()}
             >
-              Leave room
+              Leave
               <LogOut size={17} />
             </button>
           </div>

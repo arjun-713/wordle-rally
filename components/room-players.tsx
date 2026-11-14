@@ -115,9 +115,9 @@ function playerStatus(room: PublicRoom, player: Player) {
       : "Joined";
   const attempts = current?.attempts[player.id] ?? 0;
   if (current?.solved.includes(player.id)) return `Solved in ${attempts}`;
-  if (attempts >= 6) return "Out of guesses";
+  if (attempts >= 6) return "Out";
   if (current?.ended) return "Unsolved";
-  return attempts ? `Guess ${attempts}/6` : "Thinking…";
+  return attempts ? `Guess ${attempts}/6` : "Playing";
 }
 
 // A Fast Fingers run as one square per word: colours only, no letters.
@@ -252,7 +252,7 @@ export function Standings({
                     onClick={() => onManage(player)}
                     disabled={!manageable}
                   >
-                    Kick vote {vote.votes}/{vote.needed}
+                    Kick {vote.votes}/{vote.needed}
                   </button>
                 ) : race && player.active ? (
                   standing?.elapsed != null ? (
@@ -332,8 +332,8 @@ export function ManagePlayer({
                 <strong>Kick {player.name}</strong>
                 <small>
                   {lobby
-                    ? "Removes them from the room. They can rejoin with the code."
-                    : "Takes them out of this match. Their points stay in the results."}
+                    ? "They can rejoin with the code."
+                    : "Out of this match. Their points stay."}
                 </small>
               </span>
             </button>
@@ -345,9 +345,7 @@ export function ManagePlayer({
               <Ban size={20} />
               <span>
                 <strong>Ban {player.name}</strong>
-                <small>
-                  Removes them and blocks them from rejoining this room.
-                </small>
+                <small>Removed for good. Can’t rejoin.</small>
               </span>
             </button>
           </>
@@ -367,10 +365,7 @@ export function ManagePlayer({
                   }}
                 />
               </div>
-              <small>
-                A majority of the other players removes {player.name}. Players
-                removed by vote can’t rejoin this room.
-              </small>
+              <small>A majority removes them for good.</small>
             </div>
             <button
               className="button primary"
@@ -379,10 +374,10 @@ export function ManagePlayer({
             >
               <Vote size={18} />
               {vote.mine
-                ? "You voted to kick"
+                ? "You voted"
                 : vote.votes
                   ? "Add your vote"
-                  : "Nominate to kick"}
+                  : "Vote to kick"}
             </button>
           </>
         )}
@@ -517,7 +512,9 @@ export function FinalLeaderboard({
                 index={room.players.findIndex((p) => p.id === row.id)}
               />
               <strong>{row.id === room.me ? "You" : row.name}</strong>
-              <span className="podium-score">{row.score} pts</span>
+              <span className="podium-score">
+                {row.score} {row.score === 1 ? "pt" : "pts"}
+              </span>
               <span className="podium-block" aria-label={`Place ${place}`}>
                 {place === 1 ? <Crown size={22} /> : place}
               </span>
@@ -540,9 +537,9 @@ export function FinalLeaderboard({
               </strong>
               <span>
                 {row.solves}/{row.rounds} solved
-                {row.avg !== null && ` · ${row.avg.toFixed(1)} avg guesses`}
+                {row.avg !== null && ` · ${row.avg.toFixed(1)} avg`}
                 {row.fastest !== null &&
-                  ` · fastest ${(row.fastest / 1000).toFixed(1)}s`}
+                  ` · best ${(row.fastest / 1000).toFixed(1)}s`}
                 {room.config.mode === "teams" && ` · ${teamName(row.team)}`}
               </span>
             </span>

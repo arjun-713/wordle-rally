@@ -99,8 +99,8 @@ export function PreferencesButton({ children }: { children?: ReactNode }) {
           <label className="preference-row">
             <Volume2 size={21} />
             <span>
-              <strong>Sound effects</strong>
-              <small>Soft tones for guesses, wins, and errors.</small>
+              <strong>Sound</strong>
+              <small>Soft tones</small>
             </span>
             <input
               type="checkbox"
@@ -112,12 +112,8 @@ export function PreferencesButton({ children }: { children?: ReactNode }) {
           <label className="preference-row">
             <Vibrate size={21} />
             <span>
-              <strong>Haptic feedback</strong>
-              <small>
-                {haptics
-                  ? "A gentle tap on supported devices."
-                  : "Vibration is unavailable in this browser."}
-              </small>
+              <strong>Vibration</strong>
+              <small>{haptics ? "A light buzz" : "Not supported here"}</small>
             </span>
             <input
               type="checkbox"
@@ -127,9 +123,7 @@ export function PreferencesButton({ children }: { children?: ReactNode }) {
               onChange={(e) => update("haptics", e.target.checked)}
             />
           </label>
-          <p className="settings-note">
-            Motion follows your device’s reduced-motion setting.
-          </p>
+          <p className="settings-note">Motion follows your device setting.</p>
           <button
             className="button secondary full"
             disabled={!prefs.sound && !prefs.haptics}
@@ -138,7 +132,7 @@ export function PreferencesButton({ children }: { children?: ReactNode }) {
               feedback("win");
             }}
           >
-            Try win feedback
+            Test it
           </button>
         </Modal>
       )}

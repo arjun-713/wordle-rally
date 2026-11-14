@@ -48,9 +48,9 @@ test("play hub, real room creation, invites, independent turns and rematch", asy
     exact: true,
   });
   await expect(dialog).toBeVisible();
-  await dialog.getByLabel("Your player name").fill("Arjun");
-  await dialog.getByLabel("Number of rounds").selectOption("2");
-  await dialog.getByLabel("Time per round").selectOption("0");
+  await dialog.getByLabel("Your name").fill("Arjun");
+  await dialog.getByRole("combobox", { name: /^Rounds/ }).selectOption("2");
+  await dialog.getByLabel("Timer").selectOption("0");
   await screenshot(page, "create-small", 320, 700);
   await accessible(page);
   await dialog
@@ -66,7 +66,7 @@ test("play hub, real room creation, invites, independent turns and rematch", asy
     guest = await context.newPage();
   try {
     await guest.goto(`/room/${code}`);
-    await guest.getByLabel("Your player name").fill("Maya");
+    await guest.getByLabel("Your name").fill("Maya");
     await guest.getByRole("button", { name: "Join room", exact: true }).click();
     await expect(
       page.getByRole("button", { name: "Start the match" }),
@@ -83,7 +83,7 @@ test("play hub, real room creation, invites, independent turns and rematch", asy
     ).toBeUndefined();
     for (const word of wrongWords(answer)) await guess(page, word);
     await expect(page.locator(".game-status")).toContainText(
-      "others are still playing",
+      "others still playing",
     );
     await guess(guest, answer);
     await expect(
@@ -95,7 +95,7 @@ test("play hub, real room creation, invites, independent turns and rematch", asy
       ),
     ).toEqual([0, 1]);
     await page.getByRole("button", { name: "Next round" }).click();
-    await expect(guest.locator(".match-clock")).toContainText("Round 2/2");
+    await expect(guest.locator(".round-label")).toContainText("Round 2/2");
     await context.setOffline(true);
     await guest.evaluate(() => {
       document.dispatchEvent(new Event("visibilitychange"));
@@ -116,7 +116,7 @@ test("play hub, real room creation, invites, independent turns and rematch", asy
       await screenshot(page, `duel-${width}`, width, height);
       expect(
         await page
-          .locator(".keyboard")
+          .locator(".letter-tracker")
           .evaluate((el) => el.getBoundingClientRect().bottom),
       ).toBeLessThanOrEqual(height);
     }
@@ -154,7 +154,7 @@ test("Unlimited keyboard input, row rejection, modal isolation, sixth-guess win 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await input.fill("ZZZZZ");
   await input.press("Enter");
-  // Wait for the rejection before inspecting the board: the input is disabled
+  // Wait for the rejection before inspecting the board: typing is ignored
   // while the guess is in flight, so clearing it any earlier is a no-op.
   await expect(page.locator(".rejected-row")).toHaveCount(1);
   await expect(input).toBeEnabled();
@@ -206,9 +206,8 @@ test("Unlimited keyboard input, row rejection, modal isolation, sixth-guess win 
   await page.keyboard.press("Escape");
   expect((await (await page.request.get("/api/solo")).json()).id).toBe(next.id);
   const word = (await soloSecret(next.id)).answer;
-  for (const letter of word.toUpperCase())
-    await page.getByRole("button", { name: letter, exact: true }).click();
-  await page.getByRole("button", { name: "Submit guess", exact: true }).click();
+  await page.keyboard.type(word.toUpperCase());
+  await page.keyboard.press("Enter");
   await expect(page.locator(".game-status")).toHaveText("Solved in 1/6");
   await page.getByRole("button", { name: "Next word", exact: true }).click();
   await expect(page.locator(".guess-count")).toHaveText("0 / 6");
@@ -248,9 +247,7 @@ test("a lost sixth-guess response recovers the saved loss once; an unsaved reque
   try {
     await page.clock.install();
     await page.getByLabel("Type your five-letter guess").fill(fixture.wrong);
-    await page
-      .getByRole("button", { name: "Submit guess", exact: true })
-      .click();
+    await page.getByLabel("Type your five-letter guess").press("Enter");
     await saved;
     await page.clock.fastForward(12001);
     await expect(page.locator(".game-status")).toHaveText("Out of guesses");
@@ -277,13 +274,13 @@ test("a lost sixth-guess response recovers the saved loss once; an unsaved reque
     route.abort("internetdisconnected"),
   );
   await page.getByLabel("Type your five-letter guess").fill(word);
-  await page.getByRole("button", { name: "Submit guess", exact: true }).click();
+  await page.getByLabel("Type your five-letter guess").press("Enter");
   await expect(page.locator(".game-error")).toBeVisible();
   await expect(page.getByLabel("Type your five-letter guess")).toHaveValue(
     word.toUpperCase(),
   );
   await page.unroute("**/api/solo");
-  await page.getByRole("button", { name: "Submit guess", exact: true }).click();
+  await page.getByLabel("Type your five-letter guess").press("Enter");
   await expect(page.locator(".game-status")).toHaveText("Solved in 1/6");
 });
 
@@ -317,9 +314,7 @@ test("a lost multiplayer guess reply recovers the saved board without resubmitti
       } else await route.continue();
     });
     await page.getByLabel("Type your five-letter guess").fill(answer);
-    await page
-      .getByRole("button", { name: "Submit guess", exact: true })
-      .click();
+    await page.getByLabel("Type your five-letter guess").press("Enter");
     // The client times out the withheld reply, reads the durable board, and
     // adopts the saved guess instead of asking the player to submit again.
     await expect(page.locator(".game-status")).toContainText("Solved in 1/6", {
@@ -346,7 +341,7 @@ test("Daily loss resumes without another attempt and stats remain separate", asy
 }) => {
   await page.goto("/daily");
   await expect(
-    page.getByRole("heading", { name: "Daily challenge" }),
+    page.getByRole("heading", { name: "Daily", exact: true }),
   ).toBeVisible();
   const game: PublicSoloGame = await (
       await page.request.get("/api/daily")
@@ -354,7 +349,7 @@ test("Daily loss resumes without another attempt and stats remain separate", asy
     answer = (await soloSecret(game.id)).answer;
   for (const word of wrongWords(answer)) await guess(page, word);
   await expect(page.locator(".game-status")).toHaveText("Out of guesses");
-  await expect(page.getByText(/Next daily in/)).toBeVisible();
+  await expect(page.getByText(/Next word in/)).toBeVisible();
   await page.reload();
   await expect(page.locator(".game-status")).toHaveText("Out of guesses");
   await expect(page.getByRole("button", { name: "Next word" })).toHaveCount(0);
@@ -404,9 +399,7 @@ test("four real clients play a team championship with bonus scores and fixed tea
           ).toBeEnabled();
       }
     }
-    await f.pages[0]
-      .getByText("Match & tournament breakdown", { exact: true })
-      .click();
+    await f.pages[0].getByText("Matches & rounds", { exact: true }).click();
     await expect(
       f.pages[0].getByRole("button", { name: "Rematch", exact: true }),
     ).toBeVisible();
@@ -462,7 +455,7 @@ test("invalid codes and room/API boundaries fail clearly without exposing anothe
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: "Join with code" }).click();
-  await page.getByLabel("Your player name").fill("Guest");
+  await page.getByLabel("Your name").fill("Guest");
   await page.getByLabel("Room code", { exact: true }).fill("ZZZZZZ");
   await page.getByRole("button", { name: "Join room", exact: true }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText(

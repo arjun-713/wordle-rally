@@ -48,9 +48,13 @@ export async function guess(page: Page, word: string) {
   const input = page.getByLabel("Type your five-letter guess");
   await expect(input).toBeEnabled();
   await input.fill(word);
-  await page.getByRole("button", { name: "Submit guess", exact: true }).click();
+  await input.press("Enter");
+  // A match-winning guess replaces the board with the final leaderboard.
   await expect(
-    page.getByRole("row", { name: new RegExp(`: ${word.toUpperCase()}$`) }),
+    page
+      .getByRole("row", { name: new RegExp(`: ${word.toUpperCase()}$`) })
+      .or(page.locator(".final-board"))
+      .first(),
   ).toBeVisible();
 }
 export async function roomAction(page: Page, code: string, action: string) {
