@@ -10,12 +10,18 @@ import {
   GameError,
   requireGame,
   selectWords,
-  settle,
   submitGuess,
   validateConfig,
   pointsForGuess,
 } from "./engine";
 import { compareAndSet, read, readMany, storageMode } from "./store";
+import {
+  raceDeadline,
+  raceProgress,
+  raceStandings,
+  settleRoom,
+  submitRaceGuess,
+} from "./race";
 const valid = new Set(guesses);
 const roomKey = (code: string) => `rally:room:${code}`;
 const historyKey = (id: string) => `rally:history:${id}`;
@@ -30,6 +36,7 @@ export function publicRoom(
   // to players or spectators.
   const {
     rounds,
+    race,
     ips: _ips,
     bannedIps: _bannedIps,
     banned: _banned,
@@ -37,6 +44,24 @@ export function publicRoom(
   } = room;
   return {
     ...rest,
+    ...(room.config.mode === "race" && race
+      ? {
+          race: {
+            startedAt: race.startedAt,
+            endedAt: race.endedAt,
+            ...raceStandings(room),
+            progress: raceProgress(room),
+            words: rounds.map((round) => ({
+              guesses: round.guesses[me] ?? [],
+              solved: round.solved.includes(me),
+              exhausted:
+                (round.guesses[me]?.length ?? 0) >= 6 &&
+                !round.solved.includes(me),
+              ...(room.status === "finished" ? { answer: round.answer } : {}),
+            })),
+          },
+        }
+      : {}),
     me,
     serverTime: now,
     storage: storageMode(),
@@ -102,7 +127,10 @@ export async function roomSnapshot(
       round &&
       !round.ended &&
       room.config.seconds !== 0 &&
-      checkedAt >= round.endsAt)
+      checkedAt >= round.endsAt) ||
+    (room.status === "playing" &&
+      room.config.mode === "race" &&
+      checkedAt >= (raceDeadline(room) ?? Infinity))
   ) {
     return { view: await roomAction(code, id), fresh: true };
   }
@@ -297,9 +325,10 @@ export async function roomAction(
         409,
         "MATCH_CHANGED",
       );
-    settle(room, now);
+    settleRoom(room, now);
     if (
       room.config.autoAdvance &&
+      room.config.mode !== "race" &&
       room.status === "playing" &&
       room.rounds[room.round]?.ended &&
       room.round < room.config.rounds - 1
@@ -353,14 +382,23 @@ export async function roomAction(
             .reduce((sum, p) => sum + p.score, 0),
         );
         const top = Math.max(...room.players.map((p) => p.score));
+        const raceResults =
+          room.config.mode === "race" ? raceStandings(room).standings : [];
         for (const p of room.players) {
           const book = await bookFor(p.id);
           book.matchesPlayed++;
           if (
-            room.config.mode === "teams"
-              ? teamTotals[p.team] > 0 &&
-                teamTotals[p.team] === Math.max(...teamTotals)
-              : p.score > 0 && p.score === top
+            room.config.mode === "race"
+              ? raceResults.some(
+                  (s) =>
+                    s.id === p.id &&
+                    s.total !== null &&
+                    s.total === raceResults[0].total,
+                )
+              : room.config.mode === "teams"
+                ? teamTotals[p.team] > 0 &&
+                  teamTotals[p.team] === Math.max(...teamTotals)
+                : p.score > 0 && p.score === top
           )
             book.matchesWon++;
         }
@@ -405,6 +443,12 @@ export async function roomAction(
         room.config.rounds,
       );
       begin(room, words, now);
+      if (room.config.mode === "race") {
+        room.race = { startedAt: now, finishedAt: {} };
+        room.rounds.forEach((round) => {
+          round.startedAt = now;
+        });
+      }
       for (const h of histories)
         extra.push({
           key: h.key,
@@ -432,11 +476,20 @@ export async function roomAction(
       // A lost reply may be retried with the same request ID. Return the saved
       // board rather than treating the retry as a second or duplicate guess.
       if (!alreadySaved) {
-        submitGuess(room, player, word, roundIndex, valid, now);
-        if (requestId && room.rounds[room.round])
-          (room.rounds[room.round].guessRequests ??= {})[player.id] = requestId;
+        if (room.config.mode === "race")
+          submitRaceGuess(room, player, word, roundIndex, valid, now);
+        else submitGuess(room, player, word, roundIndex, valid, now);
+        // Races take guesses on any word; rounds only on the current one.
+        const saved =
+          room.config.mode === "race" ? round : room.rounds[room.round];
+        if (requestId && saved)
+          (saved.guessRequests ??= {})[player.id] = requestId;
       }
     } else if (action === "next") {
+      requireGame(
+        room.config.mode !== "race",
+        "Fast Fingers words advance independently.",
+      );
       requireGame(room.host === id, "Only the host can advance rounds.", 403);
       requireGame(
         room.status === "playing" && room.rounds[room.round].ended,
@@ -484,7 +537,7 @@ export async function roomAction(
         const tp = room.players.find((p) => p.id === targetId);
         if (tp) tp.active = false;
       }
-      settle(room, now);
+      settleRoom(room, now);
     } else if (action === "ban") {
       requireGame(room.host === id, "Only the host can ban players.", 403);
       requireGame(targetId, "Choose a player to ban.");
@@ -505,7 +558,7 @@ export async function roomAction(
         const tp = room.players.find((p) => p.id === targetId);
         if (tp) tp.active = false;
       }
-      settle(room, now);
+      settleRoom(room, now);
     } else if (
       action === "voteban" ||
       action === "voteBan" ||
@@ -539,7 +592,7 @@ export async function roomAction(
           const tp = room.players.find((p) => p.id === targetId);
           if (tp) tp.active = false;
         }
-        settle(room, now);
+        settleRoom(room, now);
       }
     } else if (
       action === "voteSkip" ||
@@ -547,6 +600,10 @@ export async function roomAction(
       action === "skip"
     ) {
       requireGame(player?.active, "Join this room before voting.", 403);
+      requireGame(
+        room.config.mode !== "race",
+        "Fast Fingers has no rounds to skip.",
+      );
       const round = room.rounds[room.round];
       requireGame(round && !round.ended, "This round has already ended.");
       round.skipVotes ??= [];
@@ -557,7 +614,7 @@ export async function roomAction(
         round.ended = true;
         if (room.round === room.config.rounds - 1) room.status = "finished";
       }
-      settle(room, now);
+      settleRoom(room, now);
     } else if (
       action === "spectate" ||
       action === "spectator" ||
@@ -590,7 +647,7 @@ export async function roomAction(
       else if (player) player.active = false;
       if (room.host === id)
         room.host = room.players.find((p) => p.active && p.id !== id)?.id ?? "";
-      settle(room, now);
+      settleRoom(room, now);
     } else if (action === "nextMatch") {
       requireGame(
         room.host === id && room.status === "finished",
@@ -615,6 +672,7 @@ export async function roomAction(
       room.status = "lobby";
       room.round = 0;
       room.rounds = [];
+      delete room.race;
     } else if (action === "replay") {
       requireGame(
         room.host === id && room.status === "finished",
@@ -633,6 +691,7 @@ export async function roomAction(
       room.status = "lobby";
       room.round = 0;
       room.rounds = [];
+      delete room.race;
     }
     await recordFinished();
     for (const [playerId, { raw, book }] of books)

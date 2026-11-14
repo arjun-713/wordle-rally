@@ -10,6 +10,9 @@ type Props = {
   playable: boolean;
   busy: boolean;
   showKeyboard?: boolean;
+  // A draft to restore, e.g. when returning to a skipped Fast Fingers word.
+  initialInput?: string;
+  onDraftChange?: (input: string) => void;
   onGuess: (word: string) => Promise<boolean>;
   onError: (message: string) => void;
 };
@@ -20,8 +23,11 @@ export function WordPlay({
   onGuess,
   onError,
   showKeyboard = true,
+  initialInput = "",
+  onDraftChange,
 }: Props) {
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(initialInput);
+  const acknowledged = useRef(guesses.length);
   const initialCount = useRef(guesses.length);
   const [rejection, setRejection] = useState("");
   const [rejectionSequence, setRejectionSequence] = useState(0);
@@ -31,10 +37,17 @@ export function WordPlay({
   const inputRef = useRef<HTMLInputElement>(null);
   const sending = useRef(false);
   useEffect(() => {
+    // Only a newly acknowledged guess clears the row, so a restored draft
+    // survives the first render.
+    if (acknowledged.current === guesses.length) return;
+    acknowledged.current = guesses.length;
     setInput("");
     setRejection("");
     wiggle.current?.cancel();
   }, [guesses.length]);
+  useEffect(() => {
+    onDraftChange?.(input);
+  }, [input]);
   useEffect(() => () => wiggle.current?.cancel(), []);
   const previousCount = useRef(guesses.length);
   useEffect(() => {

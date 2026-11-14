@@ -130,6 +130,14 @@ export function Rules() {
         add both players’ points. The host starts and advances rounds; tied
         leaders share the win.
       </p>
+      <h3>Fast Fingers</h3>
+      <p>
+        Everyone gets the same set of words. Solve them in any order: skip a
+        word and come back later. Each solve earns 6–1 points; six misses wastes
+        the word. Your final score out of 100 is half points and half speed, and
+        only players who solve every word get a total. The race closes 60
+        seconds after the first player finishes.
+      </p>
       <h3>Solo & daily</h3>
       <p>
         Unlimited offers a new puzzle after each result. Daily gives everyone

@@ -56,15 +56,17 @@ export default function Home() {
     setBusy(true);
     try {
       saveName(name);
+      const race = mode === "race";
       const config: Config = {
         mode,
         players: mode === "duel" ? 2 : mode === "teams" ? 4 : players,
         rounds,
-        seconds,
-        scoring,
+        // Fast Fingers runs on an elapsed race clock with bonus scoring.
+        seconds: race ? 0 : seconds,
+        scoring: race ? "bonus" : scoring,
         difficulty,
-        matches,
-        autoAdvance,
+        matches: race ? 1 : matches,
+        autoAdvance: race ? false : autoAdvance,
       };
       const room =
         panel === "create"
@@ -132,7 +134,7 @@ export default function Home() {
               How to play
             </button>
           </div>
-          <p className="hub-formats">1v1 · 2v2 · Free-for-all</p>
+          <p className="hub-formats">1v1 · 2v2 · Free-for-all · Fast Fingers</p>
         </section>
         <section
           className="match-preview"
@@ -253,7 +255,7 @@ export default function Home() {
                         value={
                           mode === "duel" ? 2 : mode === "teams" ? 4 : players
                         }
-                        disabled={mode !== "free"}
+                        disabled={mode !== "free" && mode !== "race"}
                         onChange={(event) =>
                           setPlayers(Number(event.target.value))
                         }
@@ -266,7 +268,7 @@ export default function Home() {
                       </select>
                     </label>
                     <label>
-                      Number of rounds
+                      {mode === "race" ? "Number of words" : "Number of rounds"}
                       <select
                         value={rounds}
                         onChange={(event) =>
@@ -285,14 +287,19 @@ export default function Home() {
                     <label>
                       Time per round
                       <select
-                        value={seconds}
+                        value={mode === "race" ? 0 : seconds}
+                        disabled={mode === "race"}
                         onChange={(event) =>
                           setSeconds(Number(event.target.value))
                         }
                       >
                         {[0, 30, 60, 90, 120, 180, 300].map((value) => (
                           <option key={value} value={value}>
-                            {value === 0 ? "No time limit" : `${value} seconds`}
+                            {value === 0
+                              ? mode === "race"
+                                ? "Race clock"
+                                : "No time limit"
+                              : `${value} seconds`}
                           </option>
                         ))}
                       </select>
@@ -300,7 +307,8 @@ export default function Home() {
                     <label>
                       Scoring
                       <select
-                        value={scoring}
+                        value={mode === "race" ? "bonus" : scoring}
+                        disabled={mode === "race"}
                         onChange={(event) =>
                           setScoring(event.target.value as typeof scoring)
                         }
@@ -327,7 +335,12 @@ export default function Home() {
                     <label>
                       Match format
                       <select
-                        value={matches === 1 ? "single" : "championship"}
+                        value={
+                          matches === 1 || mode === "race"
+                            ? "single"
+                            : "championship"
+                        }
+                        disabled={mode === "race"}
                         onChange={(event) =>
                           setMatches(event.target.value === "single" ? 1 : 3)
                         }
@@ -337,15 +350,25 @@ export default function Home() {
                       </select>
                     </label>
                   </div>
-                  <label className="checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={autoAdvance}
-                      onChange={(event) => setAutoAdvance(event.target.checked)}
-                    />
-                    Auto-advance rounds
-                  </label>
-                  {matches > 1 && (
+                  {mode === "race" ? (
+                    <p className="form-note">
+                      Everyone races through the same words. Skip and come back
+                      any time; points and speed each count for half of a score
+                      out of 100.
+                    </p>
+                  ) : (
+                    <label className="checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={autoAdvance}
+                        onChange={(event) =>
+                          setAutoAdvance(event.target.checked)
+                        }
+                      />
+                      Auto-advance rounds
+                    </label>
+                  )}
+                  {matches > 1 && mode !== "race" && (
                     <label>
                       Number of matches
                       <select

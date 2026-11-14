@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Ban, Crown, Ellipsis, Trophy, UserX, Vote } from "lucide-react";
 import type {
   GhostRow,
+  RaceWordState,
   Mark,
   MatchResult,
   Player,
@@ -119,6 +120,31 @@ function playerStatus(room: PublicRoom, player: Player) {
   return attempts ? `Guess ${attempts}/6` : "Thinking…";
 }
 
+// A Fast Fingers run as one square per word: colours only, no letters.
+export function RaceProgress({
+  name,
+  states,
+}: {
+  name: string;
+  states: RaceWordState[];
+}) {
+  const solved = states.filter((state) => state === "solved").length;
+  return (
+    <span
+      className="race-progress"
+      role="img"
+      aria-label={`${name}: ${solved} of ${states.length} words solved`}
+    >
+      {states.map((state, i) => (
+        <span key={i} className={`race-dot ${state}`} />
+      ))}
+    </span>
+  );
+}
+
+const clock = (ms: number) =>
+  `${Math.floor(ms / 60000)}:${String(Math.floor(ms / 1000) % 60).padStart(2, "0")}`;
+
 export function Standings({
   room,
   onManage,
@@ -127,8 +153,26 @@ export function Standings({
   onManage: (player: Player) => void;
 }) {
   const current = room.current;
-  const sorted = [...room.players].sort((a, b) => b.score - a.score);
-  const places = ranks(sorted);
+  const race = room.race;
+  const raceSolved = (id: string) =>
+    race?.progress[id]?.filter((state) => state === "solved").length ?? 0;
+  // During a race, rank by words solved, then bonus points.
+  const sorted = [...room.players].sort((a, b) =>
+    race
+      ? raceSolved(b.id) - raceSolved(a.id) || b.score - a.score
+      : b.score - a.score,
+  );
+  const places = race
+    ? sorted.map(
+        (p) =>
+          sorted.findIndex(
+            (o) => raceSolved(o.id) === raceSolved(p.id) && o.score === p.score,
+          ) + 1,
+      )
+    : ranks(sorted);
+  const finished = race
+    ? race.standings.filter((p) => p.elapsed !== null).length
+    : 0;
   const teams = [0, 1].map((team) =>
     room.players
       .filter((p) => p.team === team)
@@ -140,7 +184,9 @@ export function Standings({
       <div className="standings-head">
         <h2>Standings</h2>
         <span>
-          {solvedCount}/{room.players.filter((p) => p.active).length} solved
+          {race
+            ? `${finished}/${room.players.filter((p) => p.active).length} finished`
+            : `${solvedCount}/${room.players.filter((p) => p.active).length} solved`}
         </span>
       </div>
       {room.config.mode === "teams" && (
@@ -163,7 +209,10 @@ export function Standings({
             ? (current?.guesses ?? []).map((g) => ({ marks: g.marks }))
             : (current?.ghosts?.[player.id] ?? []);
           const attempts = current?.attempts[player.id] ?? 0;
-          const won = !!current?.solved.includes(player.id);
+          const standing = race?.standings.find((p) => p.id === player.id);
+          const won = race
+            ? standing?.elapsed != null
+            : !!current?.solved.includes(player.id);
           const vote = kickVotes(room, player.id);
           const manageable = canManage(room, player);
           return (
@@ -205,17 +254,30 @@ export function Standings({
                   >
                     Kick vote {vote.votes}/{vote.needed}
                   </button>
+                ) : race && player.active ? (
+                  standing?.elapsed != null ? (
+                    `Finished · ${clock(standing.elapsed)}`
+                  ) : (
+                    `${raceSolved(player.id)}/${race.words.length} solved`
+                  )
                 ) : (
                   playerStatus(room, player)
                 )}
               </span>
-              <GhostBoard
-                name={me ? "Your board" : `${player.name}'s board`}
-                rows={rows}
-                solved={won}
-                out={!won && attempts >= 6}
-                left={!player.active}
-              />
+              {race ? (
+                <RaceProgress
+                  name={me ? "Your run" : `${player.name}'s run`}
+                  states={race.progress[player.id] ?? []}
+                />
+              ) : (
+                <GhostBoard
+                  name={me ? "Your board" : `${player.name}'s board`}
+                  rows={rows}
+                  solved={won}
+                  out={!won && attempts >= 6}
+                  left={!player.active}
+                />
+              )}
               <strong className="standing-score">
                 {player.score}
                 <small>pts</small>

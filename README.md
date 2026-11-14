@@ -13,11 +13,12 @@ Play at **[wordle-rally.vercel.app](https://wordle-rally.vercel.app)**.
 
 ## Game modes
 
-| Mode                 | How it works                                                                                                                                                    |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **1 vs 1**           | Challenge a friend across the configured rounds.                                                                                                                |
-| **2 vs 2**           | Four players compete in two teams. Each player has their own board; teammates’ points add to the team total.                                                    |
-| **1 vs all**         | A free-for-all for 2–16 players. Everyone competes for their own score.                                                                                         |
-| **Championship**     | The same players or teams play several matches, with points carried into tournament standings. The host advances between matches; tied leaders share the title. |
-| **Daily challenge**  | Play one shared puzzle per day, with six guesses and saved progress.                                                                                            |
-| **Wordle Unlimited** | Play solo at your own pace and start another puzzle whenever you finish.                                                                                        |
+| Mode                 | How it works                                                                                                                                                                                                                                                    |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **1 vs 1**           | Challenge a friend across the configured rounds.                                                                                                                                                                                                                |
+| **2 vs 2**           | Four players compete in two teams. Each player has their own board; teammates’ points add to the team total.                                                                                                                                                    |
+| **1 vs all**         | A free-for-all for 2–16 players. Everyone competes for their own score.                                                                                                                                                                                         |
+| **Fast Fingers**     | Everyone races through the same set of words for 2–16 players. Skip a word and come back to it; each solve earns 6–1 points. The final score out of 100 is half points and half speed, and the race closes 60 seconds after the first player solves every word. |
+| **Championship**     | The same players or teams play several matches, with points carried into tournament standings. The host advances between matches; tied leaders share the title.                                                                                                 |
+| **Daily challenge**  | Play one shared puzzle per day, with six guesses and saved progress.                                                                                                                                                                                            |
+| **Wordle Unlimited** | Play solo at your own pace and start another puzzle whenever you finish.                                                                                                                                                                                        |

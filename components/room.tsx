@@ -42,6 +42,7 @@ import {
   teamName,
 } from "./room-players";
 import { WordPlay } from "./word-play";
+import { RacePlay } from "./race-play";
 import { TopNav } from "./navigation";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
 const ACTION_TIMEOUT_MS = 8000;
@@ -57,6 +58,14 @@ function hasGuess(
   round: number,
   attemptsBefore: number,
 ) {
+  // Fast Fingers takes guesses on any word, so check that word's board.
+  if (room.race) {
+    const board = room.race.words[round]?.guesses ?? [];
+    return (
+      board.some((guess) => guess.word === word) ||
+      board.length > attemptsBefore
+    );
+  }
   if (room.round === round && room.current) {
     if (room.current.guesses.some((guess) => guess.word === word)) return true;
     return (
@@ -75,7 +84,7 @@ function stateMoved(
   match = 0,
 ) {
   return (
-    room.round !== round ||
+    (!room.race && room.round !== round) ||
     room.matchId !== matchId ||
     (room.match ?? 0) !== match
   );
@@ -312,7 +321,9 @@ export default function RoomClient({ code }: { code: string }) {
   async function sendGuess(data: Record<string, unknown>) {
     const word = String(data.word),
       round = Number(data.round),
-      attemptsBefore = currentRef.current?.current?.guesses.length ?? 0,
+      attemptsBefore = currentRef.current?.race
+        ? (currentRef.current.race.words[round]?.guesses.length ?? 0)
+        : (currentRef.current?.current?.guesses.length ?? 0),
       matchId = currentRef.current?.matchId,
       match = currentRef.current?.match ?? 0,
       // Every attempt for this word reuses the ID, so a reply lost after the
@@ -525,10 +536,20 @@ export default function RoomClient({ code }: { code: string }) {
       70,
     );
     let y = 110;
-    sorted.forEach((player, i) => {
-      ctx.fillText(`${i + 1}. ${player.name} — ${player.score} pts`, 24, y);
-      y += 30;
-    });
+    if (room.race)
+      room.race.standings.forEach((p, i) => {
+        ctx.fillText(
+          `${i + 1}. ${p.name} — ${p.total !== null ? `${p.total}/100` : `${p.solved}/${room.race!.words.length} solved`}`,
+          24,
+          y,
+        );
+        y += 30;
+      });
+    else
+      sorted.forEach((player, i) => {
+        ctx.fillText(`${i + 1}. ${player.name} — ${player.score} pts`, 24, y);
+        y += 30;
+      });
     const link = document.createElement("a");
     link.download = `word-rally-${room.code}.png`;
     link.href = canvas.toDataURL("image/png");
@@ -685,11 +706,16 @@ export default function RoomClient({ code }: { code: string }) {
                   </span>
                 </div>
                 <div className="lobby-rules">
-                  <span>{room.config.rounds} rounds</span>
                   <span>
-                    {room.config.seconds === 0
-                      ? "No time limit"
-                      : `${room.config.seconds}s / round`}
+                    {room.config.rounds}{" "}
+                    {room.config.mode === "race" ? "words" : "rounds"}
+                  </span>
+                  <span>
+                    {room.config.mode === "race"
+                      ? "Race clock · skip & return"
+                      : room.config.seconds === 0
+                        ? "No time limit"
+                        : `${room.config.seconds}s / round`}
                   </span>
                   <span>
                     {room.config.scoring === "bonus"
@@ -880,7 +906,19 @@ export default function RoomClient({ code }: { code: string }) {
                     </button>
                   </div>
                 </div>
-                {room.status === "finished" ? (
+                {room.config.mode === "race" && room.race ? (
+                  <RacePlay
+                    key={room.matchId}
+                    room={room}
+                    busy={busy}
+                    network={network}
+                    blocked={showRules || confirmLeave || !!managing}
+                    onAction={action}
+                    onError={setError}
+                    onManage={setManaging}
+                    onShare={shareResult}
+                  />
+                ) : room.status === "finished" ? (
                   <>
                     <FinalLeaderboard
                       room={room}

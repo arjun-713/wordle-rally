@@ -2416,3 +2416,134 @@ button.standing-menu:hover {
     animation: none;
   }
 }
+
+/* ---------- Fast Fingers ---------- */
+.form-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--lime), var(--paper) 60%);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.race-bar .race-solved {
+  justify-self: end;
+  padding-right: 8px;
+}
+.race-nav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.race-words {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 44px;
+  justify-content: start;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 3px 2px;
+  scrollbar-width: thin;
+}
+.race-words button {
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 44px;
+  background: var(--paper);
+  border: 1px solid var(--control);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 700;
+  transition:
+    background 150ms var(--ease),
+    color 150ms var(--ease);
+}
+.race-words button.solved {
+  background: color-mix(in srgb, var(--correct), var(--paper) 82%);
+  border-color: var(--correct);
+  color: color-mix(in srgb, var(--correct), var(--deep) 35%);
+}
+.race-words button.exhausted {
+  background: color-mix(in srgb, var(--coral), var(--paper) 80%);
+  border-color: var(--coral);
+  color: var(--error-ink);
+}
+.race-words button[aria-current="step"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.word-progress-dot {
+  width: 5px;
+  height: 5px;
+  background: var(--present);
+  border-radius: 50%;
+}
+.race-skip {
+  flex: none;
+  min-height: 44px;
+  padding: 0 14px;
+  gap: 6px;
+  font-size: 13px;
+}
+.race-rules {
+  display: grid;
+  gap: 10px;
+  padding: 12px 0 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.race-progress {
+  grid-area: ghost;
+  display: grid;
+  grid-template-columns: repeat(5, 10px);
+  gap: 3px;
+  align-content: center;
+}
+.race-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.race-dot.started {
+  background: color-mix(in srgb, var(--present), var(--paper) 55%);
+  border-color: var(--present);
+}
+.race-dot.solved {
+  background: var(--correct);
+  border-color: var(--correct);
+  animation: ghost-in 260ms var(--ease);
+}
+.race-dot.wasted {
+  background: var(--coral);
+  border-color: var(--coral);
+}
+.final-board + .match-details,
+.match-details + .match-details {
+  width: min(100%, 640px);
+}
+@media (max-width: 1000px) {
+  .race-progress {
+    grid-template-columns: repeat(5, 7px);
+    gap: 2px;
+  }
+  .race-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 2px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .race-dot.solved {
+    animation: none;
+  }
+}

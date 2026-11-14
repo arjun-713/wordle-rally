@@ -44,6 +44,7 @@ The product is branded Wordrally. Initial capacity limit is 16 players per room;
 - Daily words are reserved from new random games. The checked-in non-repeating calendar starts October 25, 2026 and must be extended before its 366 assigned words run out; it never wraps. Legacy identities that already saw today’s word are offered Unlimited instead of a repeat.
 - Personal statistics at `/stats` show completed puzzle counts, solve rate, streaks, average guesses on wins, six-bin guess distributions, multiplayer points, and match results. Statistics live on the dedicated stats screen; active games have no metrics rail.
 - Sound and haptics are optional, off by default, and saved in the browser. Haptics depend on browser/device support. Motion follows reduced-motion settings and acknowledged guesses do not replay reveals on reload.
+- Fast Fingers: one shared set of words solved in any order, with skip and return, 6–1 points per solve, and a 100-point score split evenly between points and speed. Only complete runs get a total, and the race closes 60 seconds after the first complete run.
 - During a round, each player sees rivals' boards as colours only (ghost view); rivals' words are never sent to other players. Spectators see every player's ghost board.
 - Hosts can kick or ban players; other players can nominate a player for a vote kick, which removes them once a majority of the other active players agree.
 - No private team discussion, account system, or installable app support are included.

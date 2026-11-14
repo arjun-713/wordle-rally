@@ -22,7 +22,7 @@ export function requireGame(
 export function validateConfig(input: unknown): Config {
   const c = input as Config | undefined;
   requireGame(
-    c && ["duel", "teams", "free"].includes(c.mode),
+    c && ["duel", "teams", "free", "race"].includes(c.mode),
     "Choose a valid game mode.",
   );
   requireGame(
@@ -63,6 +63,28 @@ export function validateConfig(input: unknown): Config {
     c.autoAdvance === undefined || typeof c.autoAdvance === "boolean",
     "Choose a valid auto-advance setting.",
   );
+  if (c.mode === "race") {
+    requireGame(
+      c.seconds === 0,
+      "Fast Fingers uses an elapsed race clock, not a round timer.",
+    );
+    requireGame(
+      c.matches === undefined || c.matches === 1,
+      "Fast Fingers is a single race.",
+    );
+    requireGame(
+      c.scoring === undefined || c.scoring === "bonus",
+      "Fast Fingers uses Guess bonus scoring.",
+    );
+    return {
+      scoring: "bonus",
+      ...(c.difficulty ? { difficulty: c.difficulty } : {}),
+      mode: c.mode,
+      players: c.players,
+      rounds: c.rounds,
+      seconds: 0,
+    };
+  }
   return {
     ...(c.scoring ? { scoring: c.scoring } : {}),
     ...(c.difficulty ? { difficulty: c.difficulty } : {}),

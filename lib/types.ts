@@ -1,6 +1,6 @@
 export type Difficulty = "familiar" | "challenging" | "mixed";
 export type Scoring = "classic" | "bonus";
-export type Mode = "duel" | "teams" | "free";
+export type Mode = "duel" | "teams" | "free" | "race";
 export type Mark = "correct" | "present" | "absent";
 export type Config = {
   mode: Mode;
@@ -72,7 +72,38 @@ export type MatchResult = {
   scores: { id: string; name: string; team: number; score: number }[];
   rounds: RoundResult[];
 };
+export type RaceStanding = {
+  id: string;
+  name: string;
+  points: number;
+  solved: number;
+  resolved: boolean;
+  elapsed: number | null;
+  pointsScore: number;
+  speedScore: number;
+  total: number | null;
+};
+// Per-word state for a player's Fast Fingers run, without letters.
+export type RaceWordState = "open" | "started" | "solved" | "wasted";
+export type PublicRace = {
+  startedAt: number;
+  endedAt?: number;
+  average: number | null;
+  words: {
+    guesses: Guess[];
+    solved: boolean;
+    exhausted: boolean;
+    answer?: string;
+  }[];
+  standings: RaceStanding[];
+  progress: Record<string, RaceWordState[]>;
+};
 export type Room = {
+  race?: {
+    startedAt: number;
+    finishedAt: Record<string, number>;
+    endedAt?: number;
+  };
   matchId?: string;
   match?: number;
   matches?: MatchResult[];
@@ -94,8 +125,9 @@ export type Room = {
 };
 export type PublicRoom = Omit<
   Room,
-  "rounds" | "ips" | "bannedIps" | "banned"
+  "rounds" | "race" | "ips" | "bannedIps" | "banned"
 > & {
+  race?: PublicRace;
   me: string;
   serverTime: number;
   storage: "local" | "redis";
@@ -132,6 +164,12 @@ export const MODES: Record<
     title: "Free-for-all",
     label: "1 vs all",
     description: "The whole group. Every player for themselves.",
+  },
+  race: {
+    title: "Fast Fingers",
+    label: "Fast Fingers",
+    description:
+      "Solve the set. Skip and return. Points and speed split 50/50.",
   },
 };
 
