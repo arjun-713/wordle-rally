@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { Delete } from "lucide-react";
 import { isGuessRejection } from "@/lib/client-api";
 import { feedback, unlockFeedback } from "./preferences";
 import type { Guess, Mark } from "@/lib/types";
@@ -8,7 +9,7 @@ type Props = {
   guesses: Guess[];
   playable: boolean;
   busy: boolean;
-  // Show the A–Z tracker of used letters under the board.
+  // Show the on-screen keyboard (which also shows used letters).
   showLetters?: boolean;
   // Keep the device keyboard open when this board is replaced by the next
   // one (Fast Fingers moves to the next word after a solve).
@@ -20,7 +21,7 @@ type Props = {
   onError: (message: string) => void;
 };
 
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const KEY_ROWS = ["QWERTYUIOP", "ASDFGHJKL", "ZXCVBNM"];
 const markOrder = { absent: 0, present: 1, correct: 2 };
 const markText: Record<Mark, string> = {
   correct: "correct",
@@ -144,6 +145,9 @@ export function WordPlay({
   async function submit() {
     if (!playable || busy || sending.current) return;
     unlockFeedback();
+    // Only bring the device keyboard back if the player was using it; a tap
+    // on the on-screen Enter must not pop the phone keyboard over the keys.
+    const typingOnDevice = document.activeElement === inputRef.current;
     if (input.length !== 5) {
       reject("Five letters needed");
       return;
@@ -169,10 +173,11 @@ export function WordPlay({
       sending.current = false;
     }
     // Keep typing without another tap: the device keyboard stays up.
-    requestAnimationFrame(() => {
-      if (!document.querySelector("dialog[open]"))
-        inputRef.current?.focus({ preventScroll: true });
-    });
+    if (typingOnDevice || !coarse())
+      requestAnimationFrame(() => {
+        if (!document.querySelector("dialog[open]"))
+          inputRef.current?.focus({ preventScroll: true });
+      });
   }
   function keypress(key: string) {
     if (!playable || busy || sending.current) return;
@@ -336,26 +341,82 @@ export function WordPlay({
         <span key={rejectionSequence}>{rejection}</span>
       </span>
       {showLetters && (
-        <div className="letter-tracker" ref={lettersRef}>
+        <div className="keyboard-area" ref={lettersRef}>
           {rejection ? (
             <p className="row-message" aria-hidden="true">
               {rejection}
             </p>
           ) : null}
-          <ul aria-label="Letters used">
-            {ALPHABET.map((letter) => {
-              const mark = letters[letter];
-              return (
-                <li key={letter} className={mark}>
-                  {letter}
-                  {mark && <span className="sr-only">, {markText[mark]}</span>}
-                </li>
-              );
-            })}
-          </ul>
+          <VirtualKeyboard
+            letters={letters}
+            disabled={!playable || busy}
+            onKey={keypress}
+          />
         </div>
       )}
     </>
+  );
+}
+
+// Wordle's on-screen keyboard: tap to type, and each key shows what is known
+// about that letter. Keys never take focus, so a device keyboard in use stays
+// open and a physical keyboard keeps working.
+export function VirtualKeyboard({
+  letters,
+  disabled,
+  onKey,
+}: {
+  letters: Partial<Record<string, Mark>>;
+  disabled: boolean;
+  onKey: (key: string) => void;
+}) {
+  return (
+    <div className="keyboard" role="group" aria-label="Keyboard">
+      {KEY_ROWS.map((row, index) => (
+        <div className="keyboard-row" key={row}>
+          {index === 2 && (
+            <button
+              type="button"
+              className="key wide-key"
+              aria-label="Submit guess"
+              disabled={disabled}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => onKey("ENTER")}
+            >
+              Enter
+            </button>
+          )}
+          {row.split("").map((key) => {
+            const mark = letters[key];
+            return (
+              <button
+                type="button"
+                key={key}
+                className={`key ${mark ?? ""}`}
+                disabled={disabled}
+                aria-label={`${key}${mark ? `, ${markText[mark]}` : ""}`}
+                onPointerDown={(event) => event.preventDefault()}
+                onClick={() => onKey(key)}
+              >
+                {key}
+              </button>
+            );
+          })}
+          {index === 2 && (
+            <button
+              type="button"
+              className="key wide-key"
+              aria-label="Delete letter"
+              disabled={disabled}
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => onKey("BACKSPACE")}
+            >
+              <Delete size={20} aria-hidden="true" />
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 

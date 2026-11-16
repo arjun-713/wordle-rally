@@ -116,7 +116,7 @@ test("play hub, real room creation, invites, independent turns and rematch", asy
       await screenshot(page, `duel-${width}`, width, height);
       expect(
         await page
-          .locator(".letter-tracker")
+          .locator(".keyboard")
           .evaluate((el) => el.getBoundingClientRect().bottom),
       ).toBeLessThanOrEqual(height);
     }
@@ -221,6 +221,31 @@ test("Unlimited keyboard input, row rejection, modal isolation, sixth-guess win 
   await expect(page.locator(".stats-metrics")).toContainText("Played");
   await screenshot(page, "stats-mobile", 390, 844);
   await accessible(page);
+});
+
+test("tapping the on-screen keyboard types, deletes and submits a guess", async ({
+  page,
+}) => {
+  await page.goto("/unlimited");
+  const game: PublicSoloGame = await (
+    await page.request.post("/api/solo", { data: { action: "start" } })
+  ).json();
+  const answer = (await soloSecret(game.id)).answer;
+  const word = wrongWords(answer, 1)[0].toUpperCase();
+  await page.reload();
+  const key = (name: string) =>
+    page.getByRole("group", { name: "Keyboard" }).getByRole("button", {
+      name: new RegExp(`^${name}(,|$)`),
+    });
+  for (const letter of word) await key(letter).click();
+  await key("Delete letter").click();
+  await key(word.at(-1)!).click();
+  await key("Submit guess").click();
+  await expect(
+    page.getByRole("row", { name: `Guess 1: ${word}` }),
+  ).toBeVisible();
+  // The first letter's key now shows what the guess revealed about it.
+  await expect(key(word[0])).toHaveClass(/correct|present|absent/);
 });
 
 test("a lost sixth-guess response recovers the saved loss once; an unsaved request remains retryable", async ({

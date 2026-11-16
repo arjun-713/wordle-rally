@@ -22,7 +22,7 @@
   --control: #879180;
   --radius: 6px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
-  --tile-size: clamp(40px, min(8.4dvh, calc((100vw - 52px) / 5)), 62px);
+  --tile-size: clamp(40px, min(7.4dvh, calc((100vw - 52px) / 5)), 62px);
   --tile-gap: 5px;
   --stage-width: 560px;
   color-scheme: light;
@@ -782,76 +782,94 @@ html[data-keyboard] .game-stage {
     opacity: 0;
   }
 }
-/* Touch screens: tapping the board opens the device keyboard. */
+/* Touch screens: tapping the board opens the device keyboard instead. */
 @media (hover: none) {
   .word-board {
     cursor: text;
   }
-  .word-grid-form.idle .current-row::after {
-    content: "Tap to type";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    padding: 6px 12px;
-    border-radius: 999px;
-    background: var(--ink);
-    color: var(--paper);
-    font-size: 12px;
-    font-weight: 800;
-    white-space: nowrap;
-    pointer-events: none;
-  }
 }
-/* Used letters at a glance, in place of an on-screen keyboard. */
-.letter-tracker {
+/* Wordle's on-screen keyboard. It hides while the device keyboard is open. */
+.keyboard-area {
   position: relative;
-  width: calc(5 * var(--tile) + 4 * var(--tile-gap));
-  max-width: 100%;
+  width: min(100%, 500px);
 }
-.letter-tracker ul {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+html[data-keyboard] .keyboard-area {
+  display: none;
+}
+.keyboard {
   display: grid;
-  grid-template-columns: repeat(13, minmax(0, 1fr));
-  gap: 3px;
+  gap: 8px;
   user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
 }
-.letter-tracker li {
+.keyboard-row {
   display: flex;
-  align-items: center;
   justify-content: center;
-  height: clamp(22px, calc(var(--tile) * 0.44), 28px);
-  border-radius: 4px;
+  gap: 6px;
+}
+.keyboard-row:nth-child(2) {
+  padding-inline: 5%;
+}
+.key {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 54px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
   background: var(--key);
-  font-size: clamp(11px, calc(var(--tile) * 0.2), 12px);
+  color: var(--ink);
+  font-size: 14px;
   font-weight: 800;
-  line-height: 1;
+  -webkit-tap-highlight-color: transparent;
   transition:
     background 200ms ease,
-    color 200ms ease;
+    color 200ms ease,
+    transform 80ms ease;
 }
-.letter-tracker li.correct {
+.key.wide-key {
+  flex: 1.5;
+  font-size: 12px;
+}
+.key.correct {
   background: var(--correct);
   color: var(--paper);
 }
-.letter-tracker li.present {
+.key.present {
   background: var(--present);
   color: var(--ink);
 }
-.letter-tracker li.absent {
-  background: transparent;
-  color: var(--muted);
-  text-decoration: line-through;
-  text-decoration-thickness: 1.5px;
+/* Darker than the absent tile so white letters stay readable on keys. */
+.key.absent {
+  background: color-mix(in srgb, var(--absent), var(--deep) 35%);
+  color: var(--paper);
+}
+.key:active:not(:disabled) {
+  transform: scale(0.94);
+}
+@media (hover: hover) {
+  .key:hover:not(:disabled) {
+    filter: brightness(0.95);
+  }
+}
+.key:disabled {
+  cursor: default;
+}
+.key:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 .row-message {
   position: absolute;
   left: 50%;
-  top: 50%;
+  top: 0;
   transform: translate(-50%, -50%);
   z-index: 1;
+  pointer-events: none;
   max-width: 100%;
   padding: 7px 14px;
   border-radius: 999px;
@@ -1107,14 +1125,14 @@ html[data-keyboard] .game-stage {
   color: var(--muted);
 }
 .multiplayer-main .game-stage {
-  --tile-size: clamp(38px, min(7.2dvh, calc((100vw - 52px) / 5)), 60px);
+  --tile-size: clamp(36px, min(6.2dvh, calc((100vw - 52px) / 5)), 58px);
   gap: 10px;
 }
 /* Short laptop viewports keep the whole board above the fold under the
    round controls. */
 @media (min-width: 601px) and (max-height: 820px) {
   .multiplayer-main .game-stage {
-    --tile-size: clamp(38px, 7dvh, 60px);
+    --tile-size: clamp(36px, 5.8dvh, 58px);
   }
 }
 .compact-room-code {
@@ -3059,5 +3077,37 @@ button.standing-menu:hover {
 @media (prefers-reduced-motion: reduce) {
   .champ-pulse::after {
     animation: none;
+  }
+}
+
+/* ---------- On-screen keyboard: phones ---------- */
+@media (max-width: 440px) {
+  .keyboard {
+    gap: 6px;
+  }
+  .keyboard-row {
+    gap: 5px;
+  }
+  .key {
+    height: 50px;
+    font-size: 13px;
+  }
+  .key.wide-key {
+    font-size: 11px;
+  }
+}
+@media (max-height: 720px) {
+  .keyboard {
+    gap: 5px;
+  }
+  .key {
+    height: 44px;
+  }
+}
+/* Short phones: multiplayer has the standings strip and round bar above the
+   board, so tiles give a little room to keep the keyboard on screen. */
+@media (max-height: 720px) {
+  .multiplayer-main .game-stage {
+    --tile-size: clamp(34px, min(5.5dvh, calc((100vw - 52px) / 5)), 58px);
   }
 }
