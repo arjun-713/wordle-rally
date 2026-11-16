@@ -281,6 +281,12 @@ export function WordPlay({
             );
           })}
         </div>
+        {/* On the board, so it shows whichever keyboard is in use. */}
+        {rejection ? (
+          <p className="row-message" aria-hidden="true">
+            {rejection}
+          </p>
+        ) : null}
         {inputMounted && (
           // The device keyboard types into this input. Do not reposition the
           // caret on focus: that collapses a programmatic selection (for
@@ -342,11 +348,6 @@ export function WordPlay({
       </span>
       {showLetters && (
         <div className="keyboard-area" ref={lettersRef}>
-          {rejection ? (
-            <p className="row-message" aria-hidden="true">
-              {rejection}
-            </p>
-          ) : null}
           <VirtualKeyboard
             letters={letters}
             disabled={!playable || busy}

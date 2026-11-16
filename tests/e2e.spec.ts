@@ -112,6 +112,9 @@ test("play hub, real room creation, invites, independent turns and rematch", asy
       [1366, 768],
       [390, 844],
       [320, 700],
+      // Visible area inside phone browsers once their toolbars take space.
+      [390, 664],
+      [375, 553],
     ]) {
       await screenshot(page, `duel-${width}`, width, height);
       expect(
@@ -246,6 +249,32 @@ test("tapping the on-screen keyboard types, deletes and submits a guess", async 
   ).toBeVisible();
   // The first letter's key now shows what the guess revealed about it.
   await expect(key(word[0])).toHaveClass(/correct|present|absent/);
+  // With the device keyboard open the on-screen keys hide, but a rejection
+  // message must still be visible on the board.
+  await page.evaluate(() =>
+    document.documentElement.setAttribute("data-keyboard", ""),
+  );
+  await expect(page.locator(".keyboard")).toBeHidden();
+  const input = page.getByLabel("Type your five-letter guess");
+  await input.fill("AB");
+  await input.press("Enter");
+  await expect(page.locator(".row-message")).toBeVisible();
+  await input.fill("");
+  await page.evaluate(() =>
+    document.documentElement.removeAttribute("data-keyboard"),
+  );
+  // The whole keyboard stays on screen inside a small phone browser.
+  for (const [width, height] of [
+    [375, 553],
+    [390, 664],
+  ]) {
+    await page.setViewportSize({ width, height });
+    expect(
+      await page
+        .locator(".keyboard")
+        .evaluate((el) => el.getBoundingClientRect().bottom),
+    ).toBeLessThanOrEqual(height);
+  }
 });
 
 test("a lost sixth-guess response recovers the saved loss once; an unsaved request remains retryable", async ({

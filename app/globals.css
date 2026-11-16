@@ -666,7 +666,7 @@ legend {
 }
 .game-stage {
   /* Fitted above the device keyboard while it is open (see WordPlay). */
-  --tile: max(30px, min(var(--tile-size), var(--tile-fit, 100vw)));
+  --tile: max(24px, min(var(--tile-size), var(--tile-fit, 100vw)));
 }
 html[data-keyboard] .game-stage {
   --tile-fit: calc(
@@ -868,7 +868,7 @@ html[data-keyboard] .keyboard-area {
   left: 50%;
   top: 0;
   transform: translate(-50%, -50%);
-  z-index: 1;
+  z-index: 2;
   pointer-events: none;
   max-width: 100%;
   padding: 7px 14px;
@@ -3108,6 +3108,58 @@ button.standing-menu:hover {
    board, so tiles give a little room to keep the keyboard on screen. */
 @media (max-height: 720px) {
   .multiplayer-main .game-stage {
-    --tile-size: clamp(34px, min(5.5dvh, calc((100vw - 52px) / 5)), 58px);
+    --tile-size: clamp(30px, min(5.1dvh, calc((100vw - 52px) / 5)), 58px);
+  }
+}
+/* Very short visible areas (small phones once browser toolbars take their
+   share): compact the chrome and keys so the whole keyboard stays on screen. */
+@media (max-height: 660px) {
+  :root {
+    --tile-gap: 4px;
+  }
+  .multiplayer-main .game-stage {
+    --tile-size: clamp(26px, min(4.5dvh, calc((100vw - 52px) / 5)), 58px);
+  }
+  .multiplayer-stage,
+  .play-column {
+    gap: 6px;
+  }
+  .round-bar {
+    min-height: 38px;
+  }
+  .round-bar .match-clock {
+    font-size: 18px;
+  }
+  .game-status {
+    min-height: 18px;
+  }
+  .keyboard {
+    gap: 4px;
+  }
+  .keyboard-row {
+    gap: 4px;
+  }
+  .key {
+    height: 40px;
+  }
+}
+@media (max-height: 580px) {
+  .key {
+    height: 38px;
+  }
+  .play-shell {
+    --nav-height: 50px;
+  }
+  .game-context {
+    min-height: 34px;
+  }
+  .round-bar .skip-vote {
+    min-height: 30px;
+  }
+  .standing {
+    padding-block: 4px;
+  }
+  .standing .ghost-board {
+    --ghost-tile: 5px;
   }
 }
