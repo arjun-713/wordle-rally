@@ -11,6 +11,7 @@ import type {
   RoundResult,
 } from "@/lib/types";
 import { Modal } from "./shared";
+import { kickVoteTally } from "@/lib/scoring";
 
 const markLabel: Record<Mark, string> = {
   correct: "correct",
@@ -76,15 +77,11 @@ export function GhostBoard({
   );
 }
 
-// Mirrors the server: a majority of the other active players removes a player.
+// Same rule as the server: 80% of the other active players removes a player.
 export function kickVotes(room: PublicRoom, targetId: string) {
   const voters = room.banVotes?.[targetId] ?? [];
-  const eligible = room.players.filter(
-    (p) => p.active && p.id !== targetId,
-  ).length;
   return {
-    votes: voters.length,
-    needed: Math.floor(eligible / 2) + 1,
+    ...kickVoteTally(room.players, voters, targetId),
     mine: voters.includes(room.me),
   };
 }
@@ -363,7 +360,9 @@ export function ManagePlayer({
                   }}
                 />
               </div>
-              <small>A majority removes them for good.</small>
+              <small>
+                80% of the other players must agree. Removed for good.
+              </small>
             </div>
             <button
               className="button primary"

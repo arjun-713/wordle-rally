@@ -40,6 +40,7 @@ export function RacePlay({
   const [now, setNow] = useState(room.serverTime);
   const navigatorRef = useRef<HTMLElement>(null);
   const advance = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const startedRef = useRef(false);
   const spectator = !!room.spectators?.some((s) => s.id === room.me);
   const me = room.players.find((p) => p.id === room.me);
   const done = room.status === "finished";
@@ -111,7 +112,12 @@ export function RacePlay({
     firstFinish !== null
       ? Math.max(0, race.startedAt + firstFinish + GRACE_MS - now)
       : null;
-  const countdown = Math.max(0, Math.ceil((race.startedAt - now) / 1000));
+  // Once the race has started on this screen, clock-offset drift from later
+  // polls must never bring the countdown (and its board lock) back.
+  const countdown = startedRef.current
+    ? 0
+    : Math.max(0, Math.ceil((race.startedAt - now) / 1000));
+  if (countdown === 0) startedRef.current = true;
 
   return (
     <div className="match-layout race-layout">

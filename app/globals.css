@@ -3163,3 +3163,203 @@ button.standing-menu:hover {
     --ghost-tile: 5px;
   }
 }
+
+/* ---------- Room chat ---------- */
+.chat-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.chat-badge {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--coral);
+  color: var(--deep);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.chat-toast {
+  position: fixed;
+  top: calc(var(--nav-height, 64px) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: var(--paper);
+  box-shadow: 0 10px 32px #111a1633;
+  font-size: 13px;
+  text-align: left;
+  animation: chat-toast-in 260ms var(--ease);
+}
+.chat-toast strong {
+  flex: none;
+  color: var(--lime);
+}
+.chat-toast span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@keyframes chat-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+.chat-panel {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 40;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  width: min(360px, calc(100vw - 32px));
+  height: min(520px, 70dvh);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--paper);
+  box-shadow: 0 18px 56px #111a1638;
+  overflow: hidden;
+  animation: chat-panel-in 220ms var(--ease);
+}
+@keyframes chat-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+}
+.chat-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 6px 6px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.chat-panel h2 {
+  font-size: 15px;
+}
+.chat-messages {
+  list-style: none;
+  margin: 0;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.chat-empty {
+  margin: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+.chat-message {
+  display: grid;
+  gap: 2px;
+  max-width: 85%;
+  align-self: flex-start;
+}
+.chat-message.mine {
+  align-self: flex-end;
+  justify-items: end;
+}
+.chat-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.chat-meta strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+.chat-message p {
+  margin: 0;
+  padding: 7px 11px;
+  border-radius: 12px 12px 12px 4px;
+  background: var(--canvas);
+  font-size: 14px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.chat-message.mine p {
+  border-radius: 12px 12px 4px 12px;
+  background: var(--lime);
+}
+.chat-error {
+  margin: 0;
+  padding: 0 14px 6px;
+  color: var(--error-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.chat-form {
+  display: flex;
+  gap: 8px;
+  padding: 10px;
+  border-top: 1px solid var(--line);
+}
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 1px solid var(--control);
+  border-radius: 999px;
+  background: var(--canvas);
+  font-size: 16px; /* 16px stops iOS zooming into the field */
+}
+.chat-form input:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+.chat-send.button {
+  min-height: 44px;
+  width: 44px;
+  padding: 0;
+  border-radius: 999px;
+  flex: none;
+}
+/* Phones: a bottom sheet over the keyboard area. */
+@media (max-width: 600px) {
+  .chat-panel {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: min(62dvh, 520px);
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .chat-panel,
+  .chat-toast {
+    animation: none;
+  }
+}
+/* In a room on a phone the nav also holds Chat and Leave; Leave already goes
+   back, so the Modes link steps aside to keep the nav on one line. */
+@media (max-width: 440px) {
+  .room-page .mode-link {
+    display: none;
+  }
+}

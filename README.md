@@ -29,12 +29,13 @@ Rooms live in Upstash Redis, whose free tier allows 500,000 commands a month. Th
 
 - **Guesses** cost about one command. A server instance starts a guess from its latest copy of the room, and the write only lands if that copy is still current. If it isn't, Redis returns the current room in the same reply, so retries need no extra read.
 - **Polls** read Redis directly with a 2-second timeout. Players polling the same room on one server instance share a single read, reused for 1.5 seconds (`RALLY_ROOM_REUSE_MS`).
-- **Poll timing** follows the game: every 2.7s in a live round (4s after 30 quiet seconds, 8s after 2 idle minutes) and every 2s between rounds. Lobbies poll every 4s, then 10s and 20s. Hidden tabs stop polling. Values are in `lib/room-polling.ts`.
+- **Poll timing** follows the game: every 3s in a live round (4s after 30 quiet seconds, 8s after 2 idle minutes) and every 2s between rounds. Lobbies poll every 4s while seats fill (10s and 20s when quiet) and every 3s once full, so everyone catches the 5-second start countdown. Hidden tabs stop polling. Values are in `lib/room-polling.ts`.
+- **Chat** is stored in the room (the last 30 messages), so it arrives with the polls players already make. Each message is one write and no extra reads.
 
-| Month                                  | Worst case (no shared reads) | Share of free tier |
-| -------------------------------------- | ---------------------------- | ------------------ |
-| 1 four-player game (5 rounds, ~10 min) | ~950 commands                | —                  |
-| 200 four-player + 10 six-player games  | ~205,000                     | ~41%               |
-| 500 four-player + 10 six-player games  | ~490,000                     | ~98%               |
+| Month                                                    | Worst case (no shared reads) | Share of free tier |
+| -------------------------------------------------------- | ---------------------------- | ------------------ |
+| 1 four-player game (5 rounds, ~10 min, 30 chat messages) | ~965 commands                | —                  |
+| 200 four-player + 10 six-player games                    | ~207,000                     | ~41%               |
+| 500 four-player + 10 six-player games                    | ~496,000                     | ~99%               |
 
 Real games use less, because players on the same server instance share reads. The model is in `lib/redis-budget.ts`, and `tests/redis-budget.test.ts` fails if a change pushes the worst month over the limit.

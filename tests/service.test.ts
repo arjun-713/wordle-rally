@@ -279,3 +279,17 @@ test("a retried room creation returns the room it already made", async () => {
   const other = await createRoom(host, { ...input, requestId: randomUUID() });
   assert.notEqual(other.code, first.code);
 });
+
+test("a vote kick needs 80% of the other active players", async () => {
+  const { code, ids } = await setup(7, "free");
+  const target = ids[6];
+  // Six other players: 80% rounds up to 5 votes. Four is not enough.
+  for (const voter of ids.slice(1, 5))
+    await roomAction(code, voter, { action: "voteban", target });
+  let view = await roomAction(code, ids[0]);
+  assert.ok(view.players.some((p) => p.id === target));
+  assert.equal(view.banVotes?.[target]?.length, 4);
+  await roomAction(code, ids[5], { action: "voteban", target });
+  view = await roomAction(code, ids[0]);
+  assert.ok(!view.players.some((p) => p.id === target), "removed at 5 votes");
+});

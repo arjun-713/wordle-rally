@@ -277,6 +277,39 @@ test("tapping the on-screen keyboard types, deletes and submits a guess", async 
   }
 });
 
+test("players chat in a room: a new message shows a badge, then the thread", async ({
+  browser,
+}) => {
+  const f = await friends(browser, {
+    mode: "duel",
+    players: 2,
+    rounds: 1,
+    seconds: 0,
+  });
+  try {
+    const [host, guest] = f.pages;
+    await Promise.all(f.pages.map((p) => p.goto(`/room/${f.code}`)));
+    await host.getByRole("button", { name: "Chat", exact: true }).click();
+    await host.getByLabel("Chat message").fill("good luck!");
+    await host.getByRole("button", { name: "Send message" }).click();
+    await expect(host.locator(".chat-message.mine")).toContainText(
+      "good luck!",
+    );
+    // The guest's next poll brings the message: badge first, then the thread.
+    const toggle = guest.getByRole("button", { name: /^Chat, 1 unread$/ });
+    await expect(toggle).toBeVisible({ timeout: 15000 });
+    await toggle.click();
+    await expect(guest.locator(".chat-message")).toContainText("good luck!");
+    // Reading the thread clears the unread badge.
+    await expect(
+      guest.getByRole("button", { name: "Chat", exact: true }),
+    ).toBeVisible();
+    await accessible(guest);
+  } finally {
+    await f.close();
+  }
+});
+
 test("a lost sixth-guess response recovers the saved loss once; an unsaved request remains retryable", async ({
   page,
 }) => {

@@ -8,7 +8,7 @@ import type { PublicRoom } from "./types";
 export const POLL = {
   // Tuned for ~200 four-player games a month with 500 as the worst case; see
   // lib/redis-budget.ts and its test before making these faster.
-  live: 2900, // a round or race with recent activity
+  live: 3000, // a round or race with recent activity
   liveQuiet: 4000, // no changes for 30s
   idle: 8000, // no changes for 2 minutes: players likely away
   roundOver: 2000, // waiting for the host or auto-advance

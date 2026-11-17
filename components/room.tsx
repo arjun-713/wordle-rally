@@ -46,6 +46,7 @@ import {
 import { ChampionshipTrack, seriesLabel } from "./championship";
 import { WordPlay } from "./word-play";
 import { RacePlay } from "./race-play";
+import { RoomChat } from "./room-chat";
 import { TopNav } from "./navigation";
 import { api, Modal, Rules, savedName, saveName } from "./shared";
 import { finalConfig, RoomConfigFields, sameConfig } from "./room-config";
@@ -177,6 +178,10 @@ export default function RoomClient({ code }: { code: string }) {
   const [settings, setSettings] = useState<Config | null>(null);
   const [removed, setRemoved] = useState(false);
   const busyRef = useRef(false);
+  // Rounds whose start countdown has finished on this screen. Polls keep
+  // re-estimating the server clock offset, and a few ms of drift must never
+  // bring a finished countdown (and its board lock) back mid-round.
+  const startedRounds = useRef(new Set<string>());
   const currentRef = useRef<PublicRoom | null>(null);
   const changedAt = useRef(Date.now());
   const clockOffset = useRef(0);
@@ -421,6 +426,33 @@ export default function RoomClient({ code }: { code: string }) {
       }
     }
   }
+  // Chat is separate from game actions: it never marks the board busy or
+  // pauses polling, so a message can't hold up a guess. Returns an error
+  // message to show in the chat panel, or null once sent.
+  async function sendChat(text: string): Promise<string | null> {
+    const requestId = newRequestId();
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const next = await api<PublicRoom>(
+          `/api/rooms/${code}`,
+          { action: "chat", text, requestId },
+          undefined,
+          ACTION_TIMEOUT_MS,
+        );
+        apply(next);
+        return null;
+      } catch (error) {
+        // Resending is safe: the same request ID never posts twice.
+        if (isRetryableActionError(error) && attempt < 2) {
+          await waitForNetwork(600 * (attempt + 1));
+          continue;
+        }
+        return error instanceof Error
+          ? error.message
+          : "Couldn’t send. Try again.";
+      }
+    }
+  }
   async function sendAction(data: Record<string, unknown>) {
     for (let attempt = 0; ; attempt++) {
       try {
@@ -484,10 +516,21 @@ export default function RoomClient({ code }: { code: string }) {
         Math.max(0, Math.ceil((current.endsAt - now - offset) / 1000)),
       )
     : 0;
-  const countdown =
-    current?.startedAt && room?.status === "playing" && !current.ended
+  const roundKey = `${room?.matchId}:${room?.round}`;
+  let countdown =
+    current?.startedAt &&
+    room?.status === "playing" &&
+    !current.ended &&
+    !startedRounds.current.has(roundKey)
       ? Math.max(0, Math.ceil((current.startedAt - (now + offset)) / 1000))
       : 0;
+  if (current?.startedAt && countdown === 0)
+    startedRounds.current.add(roundKey);
+  else if (countdown > 0 && now + offset >= current!.startedAt! - 250) {
+    // Within a frame of the start: treat it as started.
+    startedRounds.current.add(roundKey);
+    countdown = 0;
+  }
   const solved = !!(room && current?.solved.includes(room.me));
   const exhausted = (current?.guesses.length ?? 0) >= 6;
   const playable = !!(
@@ -612,9 +655,15 @@ export default function RoomClient({ code }: { code: string }) {
       : 0;
   return (
     <div
-      className={`app-shell ${room?.status !== "lobby" && room ? "play-shell" : "room-shell"}`}
+      className={`app-shell room-page ${room?.status !== "lobby" && room ? "play-shell" : "room-shell"}`}
     >
       <TopNav>
+        {room &&
+          !removed &&
+          (room.players.some((p) => p.id === room.me && p.active) ||
+            room.spectators?.some((s) => s.id === room.me)) && (
+            <RoomChat room={room} onSend={sendChat} />
+          )}
         {room && (
           <button
             className="icon-button leave-control"

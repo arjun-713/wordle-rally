@@ -13,6 +13,14 @@ export type Config = {
   autoAdvance?: boolean;
 };
 export type Guess = { word: string; marks: Mark[] };
+export type ChatMessage = {
+  id: string;
+  from: string;
+  name: string;
+  text: string;
+  at: number;
+  spectator?: boolean;
+};
 export type GhostRow = { marks: Mark[] };
 export type SoloStats = {
   played: number;
@@ -122,6 +130,8 @@ export type Room = {
   ips?: Record<string, string>;
   bannedIps?: string[];
   spectators?: { id: string; name: string }[];
+  // Recent room chat, oldest first (capped; see CHAT_LIMIT in lib/service.ts).
+  chat?: ChatMessage[];
 };
 export type PublicRoom = Omit<
   Room,

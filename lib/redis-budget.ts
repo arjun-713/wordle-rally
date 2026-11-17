@@ -13,6 +13,7 @@ export type GameShape = {
   roundSeconds: number; // average time a round is live
   betweenRoundsSeconds: number; // results showing, waiting for "Next round"
   guessesPerRound: number; // per player
+  chatMessages: number; // whole room, whole game
 };
 
 export const TYPICAL_GAME: GameShape = {
@@ -23,6 +24,7 @@ export const TYPICAL_GAME: GameShape = {
   roundSeconds: 90,
   betweenRoundsSeconds: 10,
   guessesPerRound: 4,
+  chatMessages: 30,
 };
 
 // Worst-case Redis commands for one game: every poll is its own read (no
@@ -43,7 +45,9 @@ export function worstCaseCommands(game: GameShape = TYPICAL_GAME): number {
   const polls = game.players * (lobbyPolls + roundPolls);
   // A guess is one write (the room copy is reused); rate limits book 10 at a time.
   const guesses = game.players * game.rounds * game.guessesPerRound * 1.1;
+  // A chat message is one room write; no extra reads (it rides on polls).
+  const chat = game.chatMessages * 1.1;
   // Creating, joining (read + write each) and starting (history read + write).
   const setup = 2 + game.players * 2 + 3;
-  return Math.ceil(polls + guesses + setup);
+  return Math.ceil(polls + guesses + chat + setup);
 }

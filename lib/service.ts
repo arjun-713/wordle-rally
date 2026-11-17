@@ -1,3 +1,4 @@
+import { kickVoteTally } from "./scoring";
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import { pools } from "./words";
 import { parseStats, recordPuzzle, statsKey } from "./stats";
@@ -40,6 +41,23 @@ const valid = new Set(guesses);
 const roomKey = (code: string) => `rally:room:${code}`;
 const historyKey = (id: string) => `rally:history:${id}`;
 const TTL = 60 * 60 * 24 * 7;
+// Chat is kept small: it rides along with every room poll.
+export const CHAT_LIMIT = 30;
+export const CHAT_MAX_LENGTH = 160;
+const CHAT_GAP_MS = 700;
+function cleanChat(value: unknown): string {
+  requireGame(typeof value === "string", "Type a message.");
+  const text = value
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  requireGame(text.length >= 1, "Type a message.");
+  requireGame(
+    [...text].length <= CHAT_MAX_LENGTH,
+    `Keep messages under ${CHAT_MAX_LENGTH} characters.`,
+  );
+  return text;
+}
 export function publicRoom(
   room: Room,
   me: string,
@@ -281,6 +299,7 @@ export async function roomAction(
             "spectator",
             "watch",
             "configure",
+            "chat",
           ].includes(action),
         "Unknown room action.",
       );
@@ -660,10 +679,12 @@ export async function roomAction(
         room.banVotes[targetId] ??= [];
         if (!room.banVotes[targetId].includes(id))
           room.banVotes[targetId].push(id);
-        const activePlayers = room.players.filter((p) => p.active);
-        const eligible = activePlayers.filter((p) => p.id !== targetId);
-        const threshold = Math.floor(eligible.length / 2) + 1;
-        if ((room.banVotes[targetId]?.length ?? 0) >= threshold) {
+        const tally = kickVoteTally(
+          room.players,
+          room.banVotes[targetId],
+          targetId,
+        );
+        if (tally.votes >= tally.needed) {
           if (!room.banned?.includes(targetId))
             room.banned = [...(room.banned ?? []), targetId];
           const targetIp = room.ips?.[targetId];
@@ -723,6 +744,34 @@ export async function roomAction(
             : (existing?.name ?? "Spectator");
         if (existing) existing.name = name;
         else room.spectators.push({ id, name });
+      } else if (action === "chat") {
+        // Chat lives in the room, so it reaches everyone through the polls
+        // they already make: a message costs one write and no extra reads.
+        const member = player?.active ? player : undefined;
+        const watcher = (room.spectators ?? []).find((s) => s.id === id);
+        requireGame(member || watcher, "Join this room to chat.", 403);
+        const text = cleanChat(input.text);
+        const messageId = cleanRequestId(input.requestId) ?? randomUUID();
+        room.chat ??= [];
+        // A resent message (its reply was lost) is already here: no-op.
+        if (!room.chat.some((m) => m.id === messageId)) {
+          const last = room.chat.findLast((m) => m.from === id);
+          requireGame(
+            !last || now - last.at >= CHAT_GAP_MS,
+            "Slow down a little.",
+            429,
+            "CHAT_TOO_FAST",
+          );
+          room.chat.push({
+            id: messageId,
+            from: id,
+            name: (member ?? watcher)!.name,
+            text,
+            at: now,
+            ...(member ? {} : { spectator: true }),
+          });
+          room.chat = room.chat.slice(-CHAT_LIMIT);
+        }
       } else if (action === "leave") {
         if (!player && (room.spectators ?? []).some((s) => s.id === id)) {
           room.spectators = (room.spectators ?? []).filter((s) => s.id !== id);
