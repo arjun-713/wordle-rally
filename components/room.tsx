@@ -66,7 +66,10 @@ function waitForNetwork(ms: number) {
       window.removeEventListener("online", done);
       resolve();
     };
-    const timer = setTimeout(done, navigator.onLine ? ms : 15000);
+    // Offline, check again every 2s: some phones never fire "online" when
+    // they switch networks, and an offline attempt fails instantly without
+    // reaching the server, so frequent checks cost nothing.
+    const timer = setTimeout(done, navigator.onLine ? ms : Math.min(ms, 2000));
     window.addEventListener("online", done);
   });
 }
