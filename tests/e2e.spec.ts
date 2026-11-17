@@ -517,6 +517,11 @@ test("free-for-all timer and server results stay consistent across three clients
         "No points awarded",
         { timeout: 10000 },
       );
+    // No winner: no podium and no "You finished first".
+    await expect(f.pages[0].locator(".podium")).toHaveCount(0);
+    await expect(f.pages[0].locator(".final-head p")).toContainText(
+      "Nobody solved a word",
+    );
     const views: PublicRoom[] = await Promise.all(
       f.pages.map(async (p) =>
         (await p.request.get(`/api/rooms/${f.code}`)).json(),

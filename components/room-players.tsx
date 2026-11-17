@@ -463,6 +463,8 @@ export function FinalLeaderboard({
     .map((i) => rows[i] && { row: rows[i], place: places[i] })
     .filter((entry) => !!entry);
   const lastWord = room.current?.answer;
+  // With no points at all there is no winner: no podium, no "first".
+  const nobodyScored = rows.every((r) => r.score === 0);
   return (
     <section className="final-board" aria-labelledby="final-title">
       <header className="final-head">
@@ -471,10 +473,18 @@ export function FinalLeaderboard({
         <h2 id="final-title">{title}</h2>
         {mine >= 0 && (
           <p>
-            You finished{" "}
-            <strong>{places[mine] === 1 ? "first" : `#${places[mine]}`}</strong>{" "}
-            with {rows[mine].score}{" "}
-            {rows[mine].score === 1 ? "point" : "points"}
+            {nobodyScored ? (
+              "Nobody solved a word"
+            ) : (
+              <>
+                You finished{" "}
+                <strong>
+                  {places[mine] === 1 ? "first" : `#${places[mine]}`}
+                </strong>{" "}
+                with {rows[mine].score}{" "}
+                {rows[mine].score === 1 ? "point" : "points"}
+              </>
+            )}
             {lastWord && (
               <>
                 {" "}
@@ -497,7 +507,7 @@ export function FinalLeaderboard({
           ))}
         </div>
       )}
-      {rows.length > 1 && (
+      {rows.length > 1 && !nobodyScored && (
         <ol className="podium" aria-label="Podium">
           {podium.map(({ row, place }) => (
             <li
